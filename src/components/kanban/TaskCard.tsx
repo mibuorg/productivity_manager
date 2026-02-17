@@ -19,12 +19,14 @@ interface TaskCardProps {
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
   onMove: (taskId: string, status: TaskStatus) => void;
+  onCardClick?: (task: Task) => void;
   isDragging?: boolean;
 }
 
-export function TaskCard({ task, customFields, onEdit, onDelete, onMove, isDragging }: TaskCardProps) {
+export function TaskCard({ task, customFields, onEdit, onDelete, onMove, onCardClick, isDragging }: TaskCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const priority = PRIORITY_CONFIG[task.priority];
+  const hasEstimatedMinutes = typeof task.estimated_minutes === 'number' && task.estimated_minutes > 0;
   const otherColumns = COLUMNS.filter(c => c.id !== task.status);
 
   const formatDate = (dateStr: string | null) => {
@@ -42,10 +44,10 @@ export function TaskCard({ task, customFields, onEdit, onDelete, onMove, isDragg
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={() => onCardClick?.(task)}
       className={`
         glass-card card-shadow rounded-xl p-4 cursor-grab active:cursor-grabbing
         transition-all duration-200 group
-        ${isDragging ? 'opacity-50 scale-95 rotate-1' : ''}
         ${isHovered ? 'border-[hsl(var(--primary)/0.4)] translate-y-[-2px]' : 'border-[hsl(var(--glass-border))]'}
       `}
       style={{
@@ -64,6 +66,11 @@ export function TaskCard({ task, customFields, onEdit, onDelete, onMove, isDragg
           >
             {priority.label}
           </span>
+          {hasEstimatedMinutes && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide bg-secondary text-secondary-foreground">
+              {task.estimated_minutes} min
+            </span>
+          )}
           {/* Tags */}
           {task.tags?.slice(0, 2).map(tag => (
             <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
@@ -80,12 +87,23 @@ export function TaskCard({ task, customFields, onEdit, onDelete, onMove, isDragg
         <div className={`transition-opacity duration-150 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={e => e.stopPropagation()}
+              >
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-card border-border w-44">
-              <DropdownMenuItem onClick={() => onEdit(task)} className="gap-2 text-sm">
+              <DropdownMenuItem
+                onClick={e => {
+                  e.stopPropagation();
+                  onEdit(task);
+                }}
+                className="gap-2 text-sm"
+              >
                 <Edit3 className="h-3.5 w-3.5" /> Edit Task
               </DropdownMenuItem>
               <DropdownMenuSub>
@@ -96,7 +114,10 @@ export function TaskCard({ task, customFields, onEdit, onDelete, onMove, isDragg
                   {otherColumns.map(col => (
                     <DropdownMenuItem
                       key={col.id}
-                      onClick={() => onMove(task.id, col.id)}
+                      onClick={e => {
+                        e.stopPropagation();
+                        onMove(task.id, col.id);
+                      }}
                       className="gap-2 text-sm"
                     >
                       <span className="w-2 h-2 rounded-full" style={{ background: col.color }} />
@@ -107,7 +128,10 @@ export function TaskCard({ task, customFields, onEdit, onDelete, onMove, isDragg
               </DropdownMenuSub>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => onDelete(task.id)}
+                onClick={e => {
+                  e.stopPropagation();
+                  onDelete(task.id);
+                }}
                 className="gap-2 text-sm text-destructive focus:text-destructive"
               >
                 <Trash2 className="h-3.5 w-3.5" /> Delete

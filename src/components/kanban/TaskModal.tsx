@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Tag, User, Plus, Trash2 } from 'lucide-react';
+import { X, Calendar, Tag, User, Plus, Clock } from 'lucide-react';
 import { Task, TaskStatus, TaskPriority, CustomFieldDefinition, PRIORITY_CONFIG, COLUMNS } from '@/types/kanban';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -33,6 +34,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [dueDate, setDueDate] = useState('');
+  const [estimatedMinutes, setEstimatedMinutes] = useState('');
   const [assignee, setAssignee] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -45,6 +47,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
       setStatus(task.status);
       setPriority(task.priority);
       setDueDate(task.due_date || '');
+      setEstimatedMinutes(task.estimated_minutes ? String(task.estimated_minutes) : '');
       setAssignee(task.assignee || '');
       setTags(task.tags || []);
       setCustomValues(task.custom_field_values || {});
@@ -54,6 +57,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
       setStatus(defaultStatus);
       setPriority('medium');
       setDueDate('');
+      setEstimatedMinutes('');
       setAssignee('');
       setTags([]);
       setCustomValues({});
@@ -70,12 +74,20 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
 
   const handleSave = () => {
     if (!title.trim()) return;
+
+    const parsedEstimatedMinutes = Number.parseInt(estimatedMinutes, 10);
+    const normalizedEstimatedMinutes =
+      Number.isFinite(parsedEstimatedMinutes) && parsedEstimatedMinutes > 0
+        ? parsedEstimatedMinutes
+        : null;
+
     onSave({
       title: title.trim(),
       description,
       status,
       priority,
       due_date: dueDate || null,
+      estimated_minutes: normalizedEstimatedMinutes,
       assignee,
       tags,
       custom_field_values: customValues,
@@ -90,6 +102,9 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
           <DialogTitle className="text-foreground font-display">
             {task ? 'Edit Task' : 'New Task'}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            {task ? 'Edit task details' : 'Create a new task'}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
@@ -155,8 +170,8 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
             </div>
           </div>
 
-          {/* Due Date + Assignee */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Due Date + Time + Assignee */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 uppercase tracking-wide">
                 <Calendar className="h-3 w-3" /> Due Date
@@ -166,6 +181,21 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
                 value={dueDate}
                 onChange={e => setDueDate(e.target.value)}
                 className="bg-muted border-border text-foreground [color-scheme:dark]"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 uppercase tracking-wide">
+                <Clock className="h-3 w-3" /> Time
+              </label>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                value={estimatedMinutes}
+                onChange={e => setEstimatedMinutes(e.target.value)}
+                placeholder="Minutes"
+                aria-label="Time (minutes)"
+                className="bg-muted border-border text-foreground"
               />
             </div>
             <div>

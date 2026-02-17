@@ -5,6 +5,7 @@ import { KanbanColumn } from './KanbanColumn';
 import { TaskModal } from './TaskModal';
 import { CustomFieldsModal } from './CustomFieldsModal';
 import { AiChatPanel } from './AiChatPanel';
+import { TaskPomodoroOverlay } from './TaskPomodoroOverlay';
 import { Task, TaskStatus, COLUMNS } from '@/types/kanban';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -29,6 +30,7 @@ export function KanbanBoard() {
   const [customFieldsModalOpen, setCustomFieldsModalOpen] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTimerTaskId, setActiveTimerTaskId] = useState<string | null>(null);
 
   const handleAddTask = (status: TaskStatus) => {
     setEditingTask(null);
@@ -39,6 +41,14 @@ export function KanbanBoard() {
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
     setTaskModalOpen(true);
+  };
+
+  const handleTaskClick = (task: Task) => {
+    if (typeof task.estimated_minutes === 'number' && task.estimated_minutes > 0) {
+      setActiveTimerTaskId(task.id);
+      return;
+    }
+    handleEditTask(task);
   };
 
   const handleSaveTask = async (taskData: Partial<Task>) => {
@@ -67,6 +77,47 @@ export function KanbanBoard() {
   const inProgressTasks = tasks.filter(t => t.status === 'in_progress').sort((a, b) => a.position - b.position);
   const completedTasks = tasks.filter(t => t.status === 'completed').sort((a, b) => a.position - b.position);
   const tasksByColumn = { todo: todoTasks, in_progress: inProgressTasks, completed: completedTasks };
+  const activeTimerTask = activeTimerTaskId ? tasks.find(t => t.id === activeTimerTaskId) || null : null;
+
+  const appendNoteBullet = (description: string | null | undefined, note: string) => {
+    const trimmedNote = note.trim();
+    if (!trimmedNote) return description || '';
+
+    const bulletLine = `• ${trimmedNote}`;
+    if (!description?.trim()) {
+      return bulletLine;
+    }
+    return `${description.trim()}\n${bulletLine}`;
+  };
+
+  const handleTimerStart = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || task.status !== 'todo') return;
+    await moveTask(taskId, 'in_progress');
+  };
+
+  const handleTimerAddNote = async (taskId: string, note: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const nextDescription = appendNoteBullet(task.description, note);
+    await updateTask(taskId, { description: nextDescription });
+  };
+
+  const handleTimerCompletionDecision = async (taskId: string, completed: boolean) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    if (completed) {
+      if (task.status !== 'completed') {
+        await moveTask(taskId, 'completed');
+      }
+      return;
+    }
+
+    if (task.status !== 'in_progress') {
+      await moveTask(taskId, 'in_progress');
+    }
+  };
 
   if (loading) {
     return (
@@ -93,7 +144,7 @@ export function KanbanBoard() {
           </div>
           <div>
             <h1 className="text-lg font-bold text-foreground tracking-tight">
-              {board?.name || 'Kanban Board'}
+              Tasks to Complete
             </h1>
             <p className="text-xs text-muted-foreground">
               {tasks.length} task{tasks.length !== 1 ? 's' : ''} · {completedTasks.length} completed
@@ -157,6 +208,7 @@ export function KanbanBoard() {
               tasks={tasksByColumn[column.id]}
               customFields={customFields}
               onAddTask={handleAddTask}
+              onTaskClick={handleTaskClick}
               onEditTask={handleEditTask}
               onDeleteTask={deleteTask}
               onMoveTask={moveTask}
@@ -183,6 +235,15 @@ export function KanbanBoard() {
         onCreateField={createCustomField}
         onDeleteField={deleteCustomField}
         boardId={board?.id || ''}
+      />
+
+      <TaskPomodoroOverlay
+        open={!!activeTimerTask}
+        task={activeTimerTask}
+        onClose={() => setActiveTimerTaskId(null)}
+        onStart={handleTimerStart}
+        onAppendNote={handleTimerAddNote}
+        onCompleteDecision={handleTimerCompletionDecision}
       />
 
       {/* AI Panel */}

@@ -3,6 +3,31 @@ import { supabase } from '@/integrations/supabase/client';
 import { Task, Board, CustomFieldDefinition, TaskStatus } from '@/types/kanban';
 import { toast } from 'sonner';
 
+const ESTIMATED_MINUTES_KEY = '__estimated_minutes';
+
+const getEstimatedMinutes = (customFieldValues: Task['custom_field_values'] | null | undefined): number | null => {
+  const rawValue = customFieldValues?.[ESTIMATED_MINUTES_KEY];
+  return typeof rawValue === 'number' && Number.isFinite(rawValue) && rawValue > 0 ? rawValue : null;
+};
+
+const withEstimatedMinutes = (task: Task): Task => ({
+  ...task,
+  estimated_minutes: getEstimatedMinutes(task.custom_field_values),
+});
+
+const buildCustomFieldValues = (
+  baseValues: Task['custom_field_values'] | null | undefined,
+  estimatedMinutes: number | null | undefined
+) => {
+  const values = { ...(baseValues || {}) };
+  if (typeof estimatedMinutes === 'number' && estimatedMinutes > 0) {
+    values[ESTIMATED_MINUTES_KEY] = estimatedMinutes;
+  } else {
+    delete values[ESTIMATED_MINUTES_KEY];
+  }
+  return values;
+};
+
 export function useKanban() {
   const [board, setBoard] = useState<Board | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -36,8 +61,8 @@ export function useKanban() {
         .order('position', { ascending: true });
 
       if (error) throw error;
-      // Cast the data to our Task type
-      setTasks((data || []) as Task[]);
+      const mappedTasks = ((data || []) as Task[]).map(withEstimatedMinutes);
+      setTasks(mappedTasks);
     } catch (err) {
       console.error('Error fetching tasks:', err);
     }
@@ -79,6 +104,11 @@ export function useKanban() {
     if (!board) return;
     const statusTasks = tasks.filter(t => t.status === (taskData.status || 'todo'));
     const position = statusTasks.length;
+    const estimatedMinutes =
+      typeof taskData.estimated_minutes === 'number' && taskData.estimated_minutes > 0
+        ? taskData.estimated_minutes
+        : null;
+    const customFieldValues = buildCustomFieldValues(taskData.custom_field_values, estimatedMinutes);
 
     try {
       const { data, error } = await supabase
@@ -93,15 +123,16 @@ export function useKanban() {
           tags: taskData.tags || [],
           assignee: taskData.assignee || '',
           position,
-          custom_field_values: taskData.custom_field_values || {},
+          custom_field_values: customFieldValues,
         })
         .select()
         .single();
 
       if (error) throw error;
-      setTasks(prev => [...prev, data as Task]);
+      const taskWithEstimate = withEstimatedMinutes(data as Task);
+      setTasks(prev => [...prev, taskWithEstimate]);
       toast.success('Task created');
-      return data as Task;
+      return taskWithEstimate;
     } catch (err) {
       console.error('Error creating task:', err);
       toast.error('Failed to create task');
@@ -109,22 +140,40 @@ export function useKanban() {
   }, [board, tasks]);
 
   const updateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
+    const existingTask = tasks.find(t => t.id === taskId);
+    const estimatedMinutes =
+      typeof updates.estimated_minutes === 'number' && updates.estimated_minutes > 0
+        ? updates.estimated_minutes
+        : updates.estimated_minutes === null
+          ? null
+          : undefined;
+
+    const updatePayload: Partial<Task> = { ...updates };
+    if (estimatedMinutes !== undefined || updates.custom_field_values !== undefined) {
+      updatePayload.custom_field_values = buildCustomFieldValues(
+        updates.custom_field_values ?? existingTask?.custom_field_values,
+        estimatedMinutes
+      );
+    }
+    delete updatePayload.estimated_minutes;
+
     try {
       const { data, error } = await supabase
         .from('tasks')
-        .update(updates)
+        .update(updatePayload)
         .eq('id', taskId)
         .select()
         .single();
 
       if (error) throw error;
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...data } as Task : t));
-      return data as Task;
+      const taskWithEstimate = withEstimatedMinutes(data as Task);
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...taskWithEstimate } as Task : t));
+      return taskWithEstimate;
     } catch (err) {
       console.error('Error updating task:', err);
       toast.error('Failed to update task');
     }
-  }, []);
+  }, [tasks]);
 
   const deleteTask = useCallback(async (taskId: string) => {
     try {

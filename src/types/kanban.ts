@@ -20,10 +20,12 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   due_date: string | null;
+  estimated_minutes?: number | null;
   tags: string[];
   assignee: string;
   position: number;
   custom_field_values: Record<string, string | number>;
+  pomodoros_completed: number;
   created_at: string;
   updated_at: string;
 }

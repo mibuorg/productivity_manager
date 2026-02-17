@@ -10,6 +10,11 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+coverage
+.vitest
+.cache
+.eslintcache
+*.tsbuildinfo
 *.local
 
 # Editor directories and files
@@ -22,3 +27,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# User/local data
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+
+# Local AI/dev tooling state
+.gemini/
+.codex/

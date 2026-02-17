@@ -9,6 +9,7 @@ interface KanbanColumnProps {
   tasks: Task[];
   customFields: CustomFieldDefinition[];
   onAddTask: (status: TaskStatus) => void;
+  onTaskClick: (task: Task) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
   onMoveTask: (taskId: string, status: TaskStatus) => void;
@@ -20,6 +21,7 @@ export function KanbanColumn({
   tasks,
   customFields,
   onAddTask,
+  onTaskClick,
   onEditTask,
   onDeleteTask,
   onMoveTask,
@@ -59,6 +61,7 @@ export function KanbanColumn({
     e.preventDefault();
     dragCountRef.current = 0;
     setIsDragOver(false);
+    setDraggingId(null);
     const taskId = e.dataTransfer.getData('taskId');
     if (taskId) onDrop(taskId, column.id);
   };
@@ -127,6 +130,7 @@ export function KanbanColumn({
               <TaskCard
                 task={task}
                 customFields={customFields}
+                onCardClick={onTaskClick}
                 onEdit={onEditTask}
                 onDelete={onDeleteTask}
                 onMove={onMoveTask}
