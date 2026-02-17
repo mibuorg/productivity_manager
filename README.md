@@ -1,73 +1,115 @@
-# Welcome to your Lovable project
+# Ethan's Productivity Manager
 
-## Project info
+A Supabase-backed productivity app that combines a Kanban board with task-level focus timers.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Core Functionality
 
-## How can I edit this code?
+- Kanban workflow with three columns: `To Do`, `In Progress`, `Completed`
+- Drag-and-drop task movement between columns
+- Create, edit, delete, and reorder tasks
+- Task metadata support:
+  - Priority
+  - Due date
+  - Assignee
+  - Tags
+  - Estimated time (`TIME`, in minutes)
+- Time badge on task cards (displayed as `min`)
+- Task-level Pomodoro overlay:
+  - Click a timed task to open a full-screen focus timer overlay
+  - If a timer starts on a `To Do` task, it auto-moves to `In Progress`
+  - Add notes during focus sessions (appended to task description as bullet points)
+  - Completion prompt when timer ends:
+    - `Completed` moves task to `Completed`
+    - `Not yet` keeps task in `In Progress`
+- Sidebar focus timer widget
+- Optional AI assistant panel for task suggestions and board analysis
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- React + TypeScript + Vite
+- Tailwind CSS + shadcn/ui (Radix primitives)
+- `@dnd-kit` for drag-and-drop
+- Supabase (database/auth/client)
+- Vitest + Testing Library
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+### 1. Install dependencies
 
-**Use your preferred IDE**
+```bash
+npm install
+```
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 2. Configure environment variables
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Create a `.env` file in the project root:
 
-Follow these steps:
+```bash
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
+```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### 3. Run the app
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Default Vite URL is usually `http://localhost:5173`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Supabase Notes
 
-**Use GitHub Codespaces**
+This app expects Supabase tables for boards, tasks, and custom fields.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Useful SQL files in this repo:
 
-## What technologies are used for this project?
+- `src/integrations/supabase/schema.sql` (baseline schema)
+- `src/integrations/supabase/migrations/01_fix_tasks_columns.sql` (repair migration for missing task columns)
+- `supabase/migrations/20260217200147_d736fe70-38e7-4588-8afc-f8087d758c58.sql` (project migration)
 
-This project is built with:
+Edge function config is in:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- `supabase/functions/kanban-ai/index.ts`
 
-## How can I deploy this project?
+If you use the AI panel, configure the required edge function secret(s) in Supabase.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Scripts
 
-## Can I connect a custom domain to my Lovable project?
+- `npm run dev` - start dev server
+- `npm run build` - production build
+- `npm run build:dev` - development-mode build
+- `npm run preview` - preview production build
+- `npm run lint` - run ESLint
+- `npm run test` - run test suite once
+- `npm run test:watch` - run tests in watch mode
 
-Yes, you can!
+## Project Structure
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- `src/pages` - route-level pages
+- `src/components/kanban` - board, columns, cards, modals, timer overlay, AI panel
+- `src/components/pomodoro` - sidebar focus timer
+- `src/hooks` - app state/data hooks (`useKanban`, `usePomodoro`)
+- `src/integrations/supabase` - Supabase client/types/schema helpers
+- `supabase` - Supabase local config, migrations, edge functions
+- `architecture` - implementation notes/SOP docs
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Testing
+
+Run all tests:
+
+```bash
+npm test
+```
+
+Run one test file:
+
+```bash
+npm test -- src/components/kanban/TaskPomodoroOverlay.test.tsx
+```
+
+## Current Behavior Details
+
+- Timer formatting:
+  - `MM:SS` for 60 minutes or less
+  - `H:MM:SS` for times over 60 minutes (no leading zero for single-digit hours, e.g. `2:00:00`)
+- Estimated task time is persisted in `tasks.custom_field_values.__estimated_minutes` and mapped to `estimated_minutes` in UI.

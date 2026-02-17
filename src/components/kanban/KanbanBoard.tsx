@@ -134,10 +134,10 @@ export function KanbanBoard() {
 
   return (
     <div
-      className={`flex flex-col min-h-screen transition-all duration-300 ${aiPanelOpen ? 'mr-[380px]' : ''}`}
+      className={`flex h-full min-h-0 flex-col transition-all duration-300 ${aiPanelOpen ? 'mr-[380px]' : ''}`}
     >
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border/50 shrink-0">
+      <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border/50 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
             <LayoutGrid className="h-5 w-5 text-primary" />
@@ -199,7 +199,7 @@ export function KanbanBoard() {
       </header>
 
       {/* Board */}
-      <main className="flex-1 overflow-x-auto px-6 py-6">
+      <main className="flex-1 overflow-x-auto px-4 sm:px-6 py-4 sm:py-6">
         <div className="flex gap-6 min-w-max pb-6">
           {COLUMNS.map(column => (
             <KanbanColumn

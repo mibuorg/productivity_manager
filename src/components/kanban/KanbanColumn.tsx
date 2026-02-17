@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Task, Column, CustomFieldDefinition, TaskStatus } from '@/types/kanban';
 import { TaskCard } from './TaskCard';
@@ -29,7 +29,12 @@ export function KanbanColumn({
 }: KanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const dragCountRef = useRef(0);
+
+  useEffect(() => {
+    setIsTouchDevice(window.matchMedia('(pointer: coarse)').matches);
+  }, []);
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('taskId', taskId);
@@ -67,7 +72,7 @@ export function KanbanColumn({
   };
 
   return (
-    <div className="flex flex-col min-w-[300px] max-w-[340px] flex-1">
+    <div className="flex flex-col min-w-[85vw] sm:min-w-[300px] max-w-[92vw] sm:max-w-[340px] flex-1">
       {/* Column Header */}
       <div
         className="flex items-center justify-between mb-4 px-1"
@@ -107,7 +112,8 @@ export function KanbanColumn({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         className={`
-          flex-1 rounded-xl p-2 min-h-[200px] transition-all duration-200 scrollbar-thin overflow-y-auto
+          flex-1 rounded-xl p-2 min-h-[200px] max-h-[58vh] sm:max-h-[calc(100dvh-220px)] touch-pan-y
+          transition-all duration-200 scrollbar-thin overflow-y-auto
           ${isDragOver
             ? 'bg-secondary/60 border border-dashed'
             : 'bg-transparent border border-transparent'
@@ -116,14 +122,13 @@ export function KanbanColumn({
         style={{
           borderColor: isDragOver ? column.color + '60' : undefined,
           boxShadow: isDragOver ? `inset 0 0 20px ${column.glowColor}` : undefined,
-          maxHeight: 'calc(100vh - 200px)',
         }}
       >
         <div className="flex flex-col gap-3">
           {tasks.map(task => (
             <div
               key={task.id}
-              draggable
+              draggable={!isTouchDevice}
               onDragStart={e => handleDragStart(e, task.id)}
               onDragEnd={handleDragEnd}
             >

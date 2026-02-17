@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TaskCard } from './TaskCard';
 import { Task } from '@/types/kanban';
@@ -66,5 +66,44 @@ describe('TaskCard', () => {
     expect(card).not.toHaveClass('opacity-50');
     expect(card).not.toHaveClass('scale-95');
     expect(card).not.toHaveClass('rotate-1');
+  });
+
+  it('provides a next-column touch control for todo tasks', () => {
+    const onMove = vi.fn();
+
+    render(
+      <TaskCard
+        task={baseTask}
+        customFields={[]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onMove={onMove}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move to next column' }));
+    expect(onMove).toHaveBeenCalledWith(baseTask.id, 'in_progress');
+    expect(screen.queryByRole('button', { name: 'Move to previous column' })).not.toBeInTheDocument();
+  });
+
+  it('provides previous and next touch controls for in-progress tasks', () => {
+    const onMove = vi.fn();
+    const inProgressTask = { ...baseTask, status: 'in_progress' as const };
+
+    render(
+      <TaskCard
+        task={inProgressTask}
+        customFields={[]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onMove={onMove}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move to previous column' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to next column' }));
+
+    expect(onMove).toHaveBeenNthCalledWith(1, inProgressTask.id, 'todo');
+    expect(onMove).toHaveBeenNthCalledWith(2, inProgressTask.id, 'completed');
   });
 });

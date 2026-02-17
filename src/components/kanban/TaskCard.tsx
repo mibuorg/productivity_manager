@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Tag, User, MoreHorizontal, Trash2, Edit3, ArrowRight } from 'lucide-react';
+import { Calendar, Tag, User, MoreHorizontal, Trash2, Edit3, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Task, PRIORITY_CONFIG, TaskStatus, CustomFieldDefinition, COLUMNS } from '@/types/kanban';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,6 +28,11 @@ export function TaskCard({ task, customFields, onEdit, onDelete, onMove, onCardC
   const priority = PRIORITY_CONFIG[task.priority];
   const hasEstimatedMinutes = typeof task.estimated_minutes === 'number' && task.estimated_minutes > 0;
   const otherColumns = COLUMNS.filter(c => c.id !== task.status);
+  const currentColumnIndex = COLUMNS.findIndex(column => column.id === task.status);
+  const previousColumn = currentColumnIndex > 0 ? COLUMNS[currentColumnIndex - 1] : null;
+  const nextColumn = currentColumnIndex >= 0 && currentColumnIndex < COLUMNS.length - 1
+    ? COLUMNS[currentColumnIndex + 1]
+    : null;
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return null;
@@ -183,6 +188,39 @@ export function TaskCard({ task, customFields, onEdit, onDelete, onMove, onCardC
             <Calendar className="h-3 w-3" />
             {dateInfo.formatted}
           </div>
+        )}
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 sm:hidden">
+        {previousColumn && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-8 flex-1"
+            aria-label="Move to previous column"
+            onClick={e => {
+              e.stopPropagation();
+              onMove(task.id, previousColumn.id);
+            }}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            {previousColumn.title}
+          </Button>
+        )}
+        {nextColumn && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-8 flex-1"
+            aria-label="Move to next column"
+            onClick={e => {
+              e.stopPropagation();
+              onMove(task.id, nextColumn.id);
+            }}
+          >
+            {nextColumn.title}
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
         )}
       </div>
     </div>
