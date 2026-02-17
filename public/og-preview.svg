@@ -1,0 +1,48 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A1020"/>
+      <stop offset="1" stop-color="#111B32"/>
+    </linearGradient>
+    <linearGradient id="header" x1="96" y1="72" x2="620" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6EE7FF"/>
+      <stop offset="1" stop-color="#98B6FF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="48" y="48" width="1104" height="534" rx="28" fill="#0D152A" stroke="#223354"/>
+
+  <text x="96" y="95" fill="url(#header)" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="700">
+    Ethan's Productivity Manager
+  </text>
+  <text x="96" y="135" fill="#9BB0D6" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="500">
+    Tasks to Complete
+  </text>
+
+  <rect x="96" y="178" width="308" height="344" rx="20" fill="#111D37" stroke="#2A3D64"/>
+  <rect x="446" y="178" width="308" height="344" rx="20" fill="#111D37" stroke="#2A3D64"/>
+  <rect x="796" y="178" width="308" height="344" rx="20" fill="#111D37" stroke="#2A3D64"/>
+
+  <text x="120" y="220" fill="#79A6FF" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">To Do</text>
+  <text x="470" y="220" fill="#F5C463" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">In Progress</text>
+  <text x="820" y="220" fill="#67D58A" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Completed</text>
+
+  <rect x="120" y="250" width="260" height="92" rx="14" fill="#162645" stroke="#324C77"/>
+  <text x="138" y="282" fill="#F8C364" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">MEDIUM</text>
+  <text x="138" y="318" fill="#E7EEFF" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="700">Review sprint goals</text>
+
+  <rect x="470" y="250" width="260" height="142" rx="14" fill="#162645" stroke="#324C77"/>
+  <text x="488" y="282" fill="#F8C364" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">HIGH</text>
+  <text x="488" y="318" fill="#E7EEFF" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="700">Focus Session</text>
+  <text x="488" y="352" fill="#9AB0D9" font-family="Inter, Arial, sans-serif" font-size="22">25:00</text>
+
+  <rect x="820" y="250" width="260" height="92" rx="14" fill="#162645" stroke="#324C77"/>
+  <text x="838" y="282" fill="#67D58A" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">DONE</text>
+  <text x="838" y="318" fill="#E7EEFF" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="700">Ship mobile update</text>
+
+  <rect x="120" y="448" width="610" height="52" rx="12" fill="#0F1A31" stroke="#28416C"/>
+  <text x="144" y="481" fill="#A7BDE3" font-family="Inter, Arial, sans-serif" font-size="22">
+    Drag tasks, track time, and keep progress visible.
+  </text>
+</svg>
