@@ -3,6 +3,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { TaskModal } from './TaskModal';
 import { Task } from '@/types/kanban';
 
+const existingTask: Task = {
+  id: '1',
+  board_id: 'local',
+  title: 'Existing Task',
+  description: '',
+  status: 'todo',
+  priority: 'medium',
+  due_date: null,
+  estimated_minutes: 30,
+  tags: ['docs'],
+  assignee: '',
+  position: 0,
+  custom_field_values: {},
+  pomodoros_completed: 0,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+};
+
 describe('TaskModal', () => {
   it('saves estimated time in minutes when creating a task', () => {
     const onSave = vi.fn();
@@ -38,30 +56,13 @@ describe('TaskModal', () => {
   it('prefills and clears estimated time when editing a task', () => {
     const onSave = vi.fn();
     const onClose = vi.fn();
-    const task: Task = {
-      id: '1',
-      board_id: 'local',
-      title: 'Existing Task',
-      description: '',
-      status: 'todo',
-      priority: 'medium',
-      due_date: null,
-      estimated_minutes: 30,
-      tags: [],
-      assignee: '',
-      position: 0,
-      custom_field_values: {},
-      pomodoros_completed: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
 
     render(
       <TaskModal
         open
         onClose={onClose}
         onSave={onSave}
-        task={task}
+        task={existingTask}
         defaultStatus="todo"
         customFields={[]}
       />
@@ -77,6 +78,70 @@ describe('TaskModal', () => {
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         estimated_minutes: null,
+      })
+    );
+  });
+
+  it('clears the tag input when switching from editing to a new task', () => {
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+
+    const { rerender } = render(
+      <TaskModal
+        open
+        onClose={onClose}
+        onSave={onSave}
+        task={existingTask}
+        defaultStatus="todo"
+        customFields={[]}
+      />
+    );
+
+    const tagInput = screen.getByPlaceholderText('Add a tag...');
+    fireEvent.change(tagInput, { target: { value: 'carryover' } });
+    expect(tagInput).toHaveValue('carryover');
+
+    rerender(
+      <TaskModal
+        open
+        onClose={onClose}
+        onSave={onSave}
+        task={null}
+        defaultStatus="todo"
+        customFields={[]}
+      />
+    );
+
+    expect(screen.getByPlaceholderText('Add a tag...')).toHaveValue('');
+  });
+
+  it('saves a typed tag on create even when add is not clicked', () => {
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <TaskModal
+        open
+        onClose={onClose}
+        onSave={onSave}
+        task={null}
+        defaultStatus="todo"
+        customFields={[]}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('What needs to be done?'), {
+      target: { value: 'Tagged task' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Add a tag...'), {
+      target: { value: 'docs' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Task' }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tags: ['docs'],
       })
     );
   });

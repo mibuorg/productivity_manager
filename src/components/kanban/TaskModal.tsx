@@ -49,7 +49,8 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
       setDueDate(task.due_date || '');
       setEstimatedMinutes(task.estimated_minutes ? String(task.estimated_minutes) : '');
       setAssignee(task.assignee || '');
-      setTags(task.tags || []);
+      setTagInput('');
+      setTags(Array.isArray(task.tags) ? task.tags : []);
       setCustomValues(task.custom_field_values || {});
     } else {
       setTitle('');
@@ -59,6 +60,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
       setDueDate('');
       setEstimatedMinutes('');
       setAssignee('');
+      setTagInput('');
       setTags([]);
       setCustomValues({});
     }
@@ -80,6 +82,11 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
       Number.isFinite(parsedEstimatedMinutes) && parsedEstimatedMinutes > 0
         ? parsedEstimatedMinutes
         : null;
+    const trimmedTagInput = tagInput.trim();
+    const normalizedTags =
+      trimmedTagInput && !tags.includes(trimmedTagInput)
+        ? [...tags, trimmedTagInput]
+        : tags;
 
     onSave({
       title: title.trim(),
@@ -89,7 +96,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
       due_date: dueDate || null,
       estimated_minutes: normalizedEstimatedMinutes,
       assignee,
-      tags,
+      tags: normalizedTags,
       custom_field_values: customValues,
     });
     onClose();

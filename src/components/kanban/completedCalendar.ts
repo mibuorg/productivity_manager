@@ -1,10 +1,20 @@
 import { Task } from '@/types/kanban';
+import { sortTasksByPriorityAndCreatedAtDesc } from './taskSorting';
 
 const pad2 = (value: number): string => String(value).padStart(2, '0');
 
-const toDayKey = (date: Date): string => (
+export const toDayKey = (date: Date): string => (
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
 );
+
+const getCompletionDayKey = (task: Task): string | null => {
+  if (task.status !== 'completed') return null;
+
+  const parsedDate = new Date(task.updated_at);
+  if (Number.isNaN(parsedDate.getTime())) return null;
+
+  return toDayKey(parsedDate);
+};
 
 export const buildDayKeys = (now: Date, days: number): string[] => {
   return Array.from({ length: days }, (_, index) => {
@@ -25,12 +35,8 @@ export const groupCompletedTasksByDay = (
   }, {});
 
   tasks.forEach(task => {
-    if (task.status !== 'completed') return;
-
-    const parsedDate = new Date(task.updated_at);
-    if (Number.isNaN(parsedDate.getTime())) return;
-
-    const dayKey = toDayKey(parsedDate);
+    const dayKey = getCompletionDayKey(task);
+    if (!dayKey) return;
     if (!grouped[dayKey]) return;
 
     grouped[dayKey].push(task);
@@ -41,4 +47,10 @@ export const groupCompletedTasksByDay = (
   });
 
   return grouped;
+};
+
+export const getCompletedTasksForDay = (tasks: Task[], dayKey: string): Task[] => {
+  return sortTasksByPriorityAndCreatedAtDesc(
+    tasks.filter(task => getCompletionDayKey(task) === dayKey)
+  );
 };

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Task, Board, CustomFieldDefinition, TaskStatus } from '@/types/kanban';
+import { compareTasksByPriorityAndCreatedAtDesc } from '@/components/kanban/taskSorting';
 import { toast } from 'sonner';
 
 const ESTIMATED_MINUTES_KEY = '__estimated_minutes';
@@ -10,6 +11,8 @@ type LocalStatePayload = {
   tasks: Task[];
   customFields: CustomFieldDefinition[];
 };
+
+const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'completed'];
 
 const createId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -33,9 +36,27 @@ const getEstimatedMinutes = (customFieldValues: Task['custom_field_values'] | nu
   return typeof rawValue === 'number' && Number.isFinite(rawValue) && rawValue > 0 ? rawValue : null;
 };
 
+const normalizeTags = (tags: unknown): string[] => {
+  if (Array.isArray(tags)) {
+    return tags
+      .filter((tag): tag is string => typeof tag === 'string')
+      .map(tag => tag.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof tags === 'string') {
+    return tags
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
 const withEstimatedMinutes = (task: Task): Task => ({
   ...task,
-  tags: Array.isArray(task.tags) ? task.tags : [],
+  tags: normalizeTags(task.tags),
   custom_field_values: task.custom_field_values || {},
   estimated_minutes: getEstimatedMinutes(task.custom_field_values),
 });
@@ -44,6 +65,27 @@ const normalizeCustomField = (field: CustomFieldDefinition): CustomFieldDefiniti
   ...field,
   options: Array.isArray(field.options) ? field.options : [],
 });
+
+const reindexTaskPositions = (tasks: Task[]): Task[] => {
+  const positionByTaskId = new Map<string, number>();
+
+  TASK_STATUSES.forEach((status) => {
+    tasks
+      .filter(task => task.status === status)
+      .sort(compareTasksByPriorityAndCreatedAtDesc)
+      .forEach((task, index) => {
+        positionByTaskId.set(task.id, index);
+      });
+  });
+
+  return tasks.map((task) => {
+    const nextPosition = positionByTaskId.get(task.id);
+    if (nextPosition === undefined || task.position === nextPosition) {
+      return task;
+    }
+    return { ...task, position: nextPosition };
+  });
+};
 
 const normalizePayload = (payload: unknown): LocalStatePayload => {
   const fallbackBoard = createDefaultBoard();
@@ -57,7 +99,9 @@ const normalizePayload = (payload: unknown): LocalStatePayload => {
       ? (candidate.board as Board)
       : fallbackBoard;
 
-  const tasks = Array.isArray(candidate.tasks) ? (candidate.tasks as Task[]).map(withEstimatedMinutes) : [];
+  const tasks = Array.isArray(candidate.tasks)
+    ? reindexTaskPositions((candidate.tasks as Task[]).map(withEstimatedMinutes))
+    : [];
   const customFields = Array.isArray(candidate.customFields)
     ? (candidate.customFields as CustomFieldDefinition[]).map(normalizeCustomField)
     : [];
@@ -171,7 +215,7 @@ export function useKanban() {
         priority: taskData.priority || 'medium',
         due_date: taskData.due_date || null,
         estimated_minutes: estimatedMinutes,
-        tags: taskData.tags || [],
+        tags: normalizeTags(taskData.tags),
         assignee: taskData.assignee || '',
         position,
         custom_field_values: buildCustomFieldValues(taskData.custom_field_values, estimatedMinutes),
@@ -183,7 +227,7 @@ export function useKanban() {
       try {
         await persistState({
           board,
-          tasks: [...tasks, withEstimatedMinutes(newTask)],
+          tasks: reindexTaskPositions([...tasks, withEstimatedMinutes(newTask)]),
           customFields,
         });
         toast.success('Task created');
@@ -221,7 +265,7 @@ export function useKanban() {
         updated_at: new Date().toISOString(),
       } as Task);
 
-      const nextTasks = tasks.map(task => (task.id === taskId ? updatedTask : task));
+      const nextTasks = reindexTaskPositions(tasks.map(task => (task.id === taskId ? updatedTask : task)));
 
       try {
         await persistState({
@@ -241,7 +285,7 @@ export function useKanban() {
   const deleteTask = useCallback(
     async (taskId: string) => {
       if (!board) return;
-      const nextTasks = tasks.filter(task => task.id !== taskId);
+      const nextTasks = reindexTaskPositions(tasks.filter(task => task.id !== taskId));
 
       try {
         await persistState({
@@ -272,7 +316,7 @@ export function useKanban() {
         updated_at: new Date().toISOString(),
       };
 
-      const nextTasks = tasks.map(t => (t.id === taskId ? movedTask : t));
+      const nextTasks = reindexTaskPositions(tasks.map(t => (t.id === taskId ? movedTask : t)));
 
       try {
         await persistState({
@@ -340,7 +384,7 @@ export function useKanban() {
       if (!board) return;
 
       const reorderedById = new Map(reorderedTasks.map(task => [task.id, task]));
-      const nextTasks = tasks.map(task => reorderedById.get(task.id) ?? task);
+      const nextTasks = reindexTaskPositions(tasks.map(task => reorderedById.get(task.id) ?? task));
 
       try {
         await persistState({

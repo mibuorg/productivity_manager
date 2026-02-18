@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KanbanBoard } from './KanbanBoard';
 import { Task } from '@/types/kanban';
 
@@ -36,13 +36,15 @@ vi.mock('@/hooks/useKanban', () => ({
 }));
 
 vi.mock('./KanbanColumn', () => ({
-  KanbanColumn: ({ column }: { column: { title: string } }) => (
-    <div data-testid="board-column">{column.title}</div>
+  KanbanColumn: ({ column, tasks }: { column: { id: string; title: string }; tasks: Task[] }) => (
+    <div data-testid="board-column" data-column-id={column.id}>{column.title}:{tasks.length}</div>
   ),
 }));
 
 vi.mock('./CompletedCalendarView', () => ({
-  CompletedCalendarView: () => <div data-testid="completed-calendar-view">Calendar View</div>,
+  CompletedCalendarView: ({ tasks }: { tasks: Task[] }) => (
+    <div data-testid="completed-calendar-view">Calendar View:{tasks.length}</div>
+  ),
 }));
 
 vi.mock('./TaskModal', () => ({
@@ -62,10 +64,15 @@ vi.mock('./TaskPomodoroOverlay', () => ({
 }));
 
 describe('KanbanBoard calendar toggle', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('shows board view by default and switches to completed calendar view', () => {
     render(<KanbanBoard />);
 
     expect(screen.getAllByTestId('board-column')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: 'Fields' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('completed-calendar-view')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Completed Calendar' }));
@@ -77,5 +84,19 @@ describe('KanbanBoard calendar toggle', () => {
 
     expect(screen.getAllByTestId('board-column')).toHaveLength(3);
     expect(screen.queryByTestId('completed-calendar-view')).not.toBeInTheDocument();
+  });
+
+  it('resets completed column on a new day while keeping history in completed calendar', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-19T12:00:00.000Z'));
+
+    render(<KanbanBoard />);
+
+    const completedColumn = screen.getAllByTestId('board-column')
+      .find(column => column.getAttribute('data-column-id') === 'completed');
+    expect(completedColumn).toHaveTextContent('Completed:0');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Completed Calendar' }));
+    expect(screen.getByTestId('completed-calendar-view')).toHaveTextContent('Calendar View:1');
   });
 });

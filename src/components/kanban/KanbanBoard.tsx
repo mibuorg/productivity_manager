@@ -1,39 +1,45 @@
-import { useState } from 'react';
-import { Plus, Settings2, Sparkles, Save, LayoutGrid, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Sparkles, LayoutGrid, Loader2 } from 'lucide-react';
 import { useKanban } from '@/hooks/useKanban';
 import { KanbanColumn } from './KanbanColumn';
 import { CompletedCalendarView } from './CompletedCalendarView';
 import { TaskModal } from './TaskModal';
-import { CustomFieldsModal } from './CustomFieldsModal';
 import { AiChatPanel } from './AiChatPanel';
 import { TaskPomodoroOverlay } from './TaskPomodoroOverlay';
+import { getCompletedTasksForDay, toDayKey } from './completedCalendar';
+import { sortTasksByPriorityAndCreatedAtDesc } from './taskSorting';
 import { Task, TaskStatus, COLUMNS } from '@/types/kanban';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
 
 export function KanbanBoard() {
   const {
     board,
     tasks,
-    customFields,
     loading,
     createTask,
     updateTask,
     deleteTask,
     moveTask,
-    createCustomField,
-    deleteCustomField,
   } = useKanban();
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>('todo');
-  const [customFieldsModalOpen, setCustomFieldsModalOpen] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [viewMode, setViewMode] = useState<'board' | 'completed_calendar'>('board');
   const [activeTimerTaskId, setActiveTimerTaskId] = useState<string | null>(null);
   const [activeTimersByTaskId, setActiveTimersByTaskId] = useState<Record<string, number>>({});
+  const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCurrentTimestamp(Date.now());
+    }, 60_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const handleAddTask = (status: TaskStatus) => {
     setEditingTask(null);
@@ -69,16 +75,10 @@ export function KanbanBoard() {
     }
   };
 
-  const handleSaveAll = async () => {
-    setIsSaving(true);
-    await new Promise(r => setTimeout(r, 500));
-    setIsSaving(false);
-    toast.success('All changes saved to database ✓');
-  };
-
-  const todoTasks = tasks.filter(t => t.status === 'todo').sort((a, b) => a.position - b.position);
-  const inProgressTasks = tasks.filter(t => t.status === 'in_progress').sort((a, b) => a.position - b.position);
-  const completedTasks = tasks.filter(t => t.status === 'completed').sort((a, b) => a.position - b.position);
+  const todayDayKey = useMemo(() => toDayKey(new Date(currentTimestamp)), [currentTimestamp]);
+  const todoTasks = sortTasksByPriorityAndCreatedAtDesc(tasks.filter(t => t.status === 'todo'));
+  const inProgressTasks = sortTasksByPriorityAndCreatedAtDesc(tasks.filter(t => t.status === 'in_progress'));
+  const completedTasks = getCompletedTasksForDay(tasks, todayDayKey);
   const tasksByColumn = { todo: todoTasks, in_progress: inProgressTasks, completed: completedTasks };
   const activeTimerTask = activeTimerTaskId ? tasks.find(t => t.id === activeTimerTaskId) || null : null;
 
@@ -176,27 +176,6 @@ export function KanbanBoard() {
           </div>
 
           <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCustomFieldsModalOpen(true)}
-            className="border-border text-muted-foreground hover:text-foreground gap-2 h-8"
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Fields</span>
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSaveAll}
-            disabled={isSaving}
-            className="border-border text-muted-foreground hover:text-foreground gap-2 h-8"
-          >
-            {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">Save</span>
-          </Button>
-
-          <Button
             size="sm"
             onClick={() => handleAddTask('todo')}
             className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 h-8"
@@ -230,7 +209,7 @@ export function KanbanBoard() {
                 column={column}
                 tasks={tasksByColumn[column.id]}
                 activeTimersByTaskId={activeTimersByTaskId}
-                customFields={customFields}
+                customFields={[]}
                 onAddTask={handleAddTask}
                 onTaskClick={handleTaskClick}
                 onEditTask={handleEditTask}
@@ -243,7 +222,7 @@ export function KanbanBoard() {
         ) : (
           <CompletedCalendarView
             tasks={tasks}
-            customFields={customFields}
+            customFields={[]}
             activeTimersByTaskId={activeTimersByTaskId}
             onTaskClick={handleTaskClick}
             onEditTask={handleEditTask}
@@ -260,16 +239,7 @@ export function KanbanBoard() {
         onSave={handleSaveTask}
         task={editingTask}
         defaultStatus={defaultStatus}
-        customFields={customFields}
-      />
-
-      <CustomFieldsModal
-        open={customFieldsModalOpen}
-        onClose={() => setCustomFieldsModalOpen(false)}
-        customFields={customFields}
-        onCreateField={createCustomField}
-        onDeleteField={deleteCustomField}
-        boardId={board?.id || ''}
+        customFields={[]}
       />
 
       <TaskPomodoroOverlay

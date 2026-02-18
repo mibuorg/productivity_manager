@@ -103,4 +103,132 @@ describe('useKanban', () => {
     const body = JSON.parse((putCall[1] as RequestInit).body as string) as LocalStateResponse;
     expect(body.tasks.some(task => task.title === 'New local task')).toBe(true);
   });
+
+  it('normalizes legacy string tags into arrays when loading tasks', async () => {
+    const legacyTask = {
+      ...initialState.tasks[0],
+      tags: 'docs',
+    } as unknown as Task;
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...initialState,
+        tasks: [legacyTask],
+      }),
+    });
+
+    const { result } = renderHook(() => useKanban());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.tasks[0]?.tags).toEqual(['docs']);
+  });
+
+  it('reindexes destination column positions by priority and created_at when moving a task', async () => {
+    const moveState: LocalStateResponse = {
+      ...initialState,
+      tasks: [
+        {
+          id: 'todo-urgent',
+          board_id: 'board-1',
+          title: 'Urgent todo',
+          description: '',
+          status: 'todo',
+          priority: 'urgent',
+          due_date: null,
+          tags: [],
+          assignee: '',
+          position: 0,
+          custom_field_values: {},
+          pomodoros_completed: 0,
+          created_at: '2026-02-18T12:00:00.000Z',
+          updated_at: '2026-02-18T12:00:00.000Z',
+        },
+        {
+          id: 'inprogress-high-newer',
+          board_id: 'board-1',
+          title: 'High newer',
+          description: '',
+          status: 'in_progress',
+          priority: 'high',
+          due_date: null,
+          tags: [],
+          assignee: '',
+          position: 0,
+          custom_field_values: {},
+          pomodoros_completed: 0,
+          created_at: '2026-02-18T11:00:00.000Z',
+          updated_at: '2026-02-18T11:00:00.000Z',
+        },
+        {
+          id: 'inprogress-high-older',
+          board_id: 'board-1',
+          title: 'High older',
+          description: '',
+          status: 'in_progress',
+          priority: 'high',
+          due_date: null,
+          tags: [],
+          assignee: '',
+          position: 1,
+          custom_field_values: {},
+          pomodoros_completed: 0,
+          created_at: '2026-02-18T09:00:00.000Z',
+          updated_at: '2026-02-18T09:00:00.000Z',
+        },
+        {
+          id: 'inprogress-medium',
+          board_id: 'board-1',
+          title: 'Medium',
+          description: '',
+          status: 'in_progress',
+          priority: 'medium',
+          due_date: null,
+          tags: [],
+          assignee: '',
+          position: 2,
+          custom_field_values: {},
+          pomodoros_completed: 0,
+          created_at: '2026-02-18T13:00:00.000Z',
+          updated_at: '2026-02-18T13:00:00.000Z',
+        },
+      ],
+    };
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => moveState,
+    });
+
+    const { result } = renderHook(() => useKanban());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.moveTask('todo-urgent', 'in_progress');
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    const putCall = fetchMock.mock.calls[1];
+    const body = JSON.parse((putCall[1] as RequestInit).body as string) as LocalStateResponse;
+    const inProgressByPosition = body.tasks
+      .filter(task => task.status === 'in_progress')
+      .sort((a, b) => a.position - b.position)
+      .map(task => task.id);
+
+    expect(inProgressByPosition).toEqual([
+      'todo-urgent',
+      'inprogress-high-newer',
+      'inprogress-high-older',
+      'inprogress-medium',
+    ]);
+  });
 });

@@ -40,6 +40,27 @@ describe('TaskCard', () => {
     expect(screen.getByText('45 min')).toBeInTheDocument();
   });
 
+  it('shows task tags with original capitalization and time badge styling', () => {
+    render(
+      <TaskCard
+        task={{ ...baseTask, tags: ['Docs'] }}
+        customFields={[]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onMove={vi.fn()}
+      />
+    );
+
+    const tagBadge = screen.getByText('Docs');
+    const title = screen.getByText('Write API docs');
+    expect(tagBadge).toBeInTheDocument();
+    expect(tagBadge).toHaveClass('font-semibold');
+    expect(tagBadge).not.toHaveClass('uppercase');
+    expect(tagBadge).toHaveClass('bg-secondary');
+    expect(tagBadge).toHaveClass('text-secondary-foreground');
+    expect(title.compareDocumentPosition(tagBadge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('does not show a task time estimate badge when estimated minutes are missing', () => {
     render(
       <TaskCard

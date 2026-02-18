@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Task } from '@/types/kanban';
-import { buildDayKeys, groupCompletedTasksByDay } from './completedCalendar';
+import { buildDayKeys, getCompletedTasksForDay, groupCompletedTasksByDay } from './completedCalendar';
 
 const baseTask: Task = {
   id: 'task-1',
@@ -82,5 +82,54 @@ describe('completedCalendar utilities', () => {
     ]);
     expect(grouped['2026-02-17'].map(task => task.id)).toEqual(['completed-yesterday']);
     expect(grouped['2026-02-16']).toEqual([]);
+  });
+
+  it('returns completed tasks for the day sorted by priority, then created_at descending', () => {
+    const completedUrgentOlder: Task = {
+      ...baseTask,
+      id: 'completed-urgent-older',
+      priority: 'urgent',
+      created_at: new Date(2026, 1, 18, 9, 0, 0).toISOString(),
+      updated_at: new Date(2026, 1, 18, 16, 0, 0).toISOString(),
+      position: 5,
+    };
+
+    const completedUrgentNewer: Task = {
+      ...baseTask,
+      id: 'completed-urgent-newer',
+      priority: 'urgent',
+      created_at: new Date(2026, 1, 18, 10, 0, 0).toISOString(),
+      updated_at: new Date(2026, 1, 18, 12, 0, 0).toISOString(),
+      position: 0,
+    };
+
+    const completedHigh: Task = {
+      ...baseTask,
+      id: 'completed-high',
+      priority: 'high',
+      created_at: new Date(2026, 1, 18, 11, 0, 0).toISOString(),
+      updated_at: new Date(2026, 1, 18, 11, 30, 0).toISOString(),
+      position: 1,
+    };
+
+    const completedYesterday: Task = {
+      ...baseTask,
+      id: 'completed-yesterday',
+      priority: 'urgent',
+      created_at: new Date(2026, 1, 17, 12, 0, 0).toISOString(),
+      updated_at: new Date(2026, 1, 17, 12, 0, 0).toISOString(),
+      position: 2,
+    };
+
+    const result = getCompletedTasksForDay(
+      [completedUrgentOlder, completedHigh, completedYesterday, completedUrgentNewer],
+      '2026-02-18'
+    );
+
+    expect(result.map(task => task.id)).toEqual([
+      'completed-urgent-newer',
+      'completed-urgent-older',
+      'completed-high',
+    ]);
   });
 });

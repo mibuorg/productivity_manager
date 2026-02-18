@@ -137,17 +137,6 @@ export function TaskCard({
               {task.estimated_minutes} min
             </span>
           )}
-          {/* Tags */}
-          {task.tags?.slice(0, 2).map(tag => (
-            <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-              {tag}
-            </span>
-          ))}
-          {(task.tags?.length || 0) > 2 && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-              +{task.tags.length - 2}
-            </span>
-          )}
         </div>
 
         <div className={`transition-opacity duration-150 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
@@ -211,6 +200,21 @@ export function TaskCard({
       <h3 className="text-sm font-semibold text-foreground leading-snug mb-1.5 line-clamp-2">
         {task.title}
       </h3>
+
+      {(task.tags?.length || 0) > 0 && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {task.tags.slice(0, 2).map(tag => (
+            <span key={tag} className="text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide bg-secondary text-secondary-foreground">
+              {tag}
+            </span>
+          ))}
+          {task.tags.length > 2 && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide bg-secondary text-secondary-foreground">
+              +{task.tags.length - 2}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Description */}
       {task.description && (

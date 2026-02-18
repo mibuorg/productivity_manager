@@ -1,24 +1,38 @@
 # Pomodoro Architecture SOP
 
 ## Goal
-Implement a Pomodoro timer that persists across reloads and syncs completions to tasks.
+Provide two timer experiences:
+- A board-level focus timer with editable per-mode durations.
+- Task-level Pomodoro overlays that can run independently per task.
 
-## State Management
-- `timeLeft`: integer (seconds)
-- `isActive`: boolean
-- `mode`: string ('work' | 'shortBreak' | 'longBreak')
-- `taskId`: uuid (optional, if tracking time for a specific task)
+## Focus Timer (`usePomodoro` + `PomodoroTimer`)
+### State
+- `mode`: `'work' | 'shortBreak' | 'longBreak'`
+- `timeLeft`: seconds
+- `isActive`: running flag
+- `settings`: per-mode durations (seconds)
+- `expectedEndTime`: wall-clock end timestamp for drift-safe ticking
 
-## Persistence Logic
-1.  **Start**: Save `startTime` and `expectedEndTime` to `localStorage`.
-2.  **Tick**: `timeLeft = expectedEndTime - now()`.
-3.  **Pause**: Save `timeLeft` to `localStorage`. Clear `startTime`.
-4.  **Resume**: Calculate new `expectedEndTime = now() + timeLeft` from storage.
-5.  **Complete**:
-    -   Play sound.
-    -   If `taskId` exists, increment `pomodoros_completed` in Supabase.
-    -   Update `mode` (auto-switch to break?).
+### Persistence
+- Runtime state keys:
+  - `pomodoro_mode`
+  - `pomodoro_timeLeft`
+  - `pomodoro_isActive`
+  - `pomodoro_expectedEndTime`
+- Mode duration settings key:
+  - `pomodoro_settings`
 
-## Edge Cases
-- **Tab Close**: Timer continues running "in background" via `expectedEndTime` check on reopen.
-- **Multiple Tabs**: `localStorage` event listener ensures sync.
+### Behavior
+1. Timer display is clickable for the active mode; user can input minutes.
+2. Enter/blur saves new duration for the active mode.
+3. Saved durations persist across reloads and are used by mode switch/reset.
+4. Tick logic uses wall-clock deltas from `expectedEndTime` to avoid interval drift.
+
+## Task Overlay Timer (`TaskPomodoroOverlay`)
+- Timer state is stored per task in `task_pomodoro_timers`.
+- Multiple task timers can run in parallel.
+- End-of-timer prompt lets user mark task complete or keep it in progress.
+
+## UI Notes
+- Focus timer mode switcher is constrained to sidebar width via a responsive segmented control.
+- Compact labels are used on narrow widths; full labels are shown on wider widths.

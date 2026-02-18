@@ -7,10 +7,13 @@ Single-user, local-first productivity app with a Kanban board and task-level foc
 - Three-column Kanban flow: `To Do`, `In Progress`, `Completed`
 - Create/edit/delete/drag tasks
 - Task metadata: priority, due date, tags, assignee, and `TIME`
+- Column task ordering: priority desc (`Urgent > High > Medium > Low`), then created time desc for ties
 - Timer-enabled tasks open a floating Pomodoro overlay
 - One-click timer start:
   - Starts countdown immediately
   - Moves task from `To Do` to `In Progress`
+- Focus timer supports per-mode editable durations (`Focus`, `Short Break`, `Long Break`)
+- Focus timer mode durations persist per user in browser localStorage
 - Persistent per-task timers (multiple active at once)
 - Active timer remaining time shown directly on task cards
 - Timer note entry appends bullet points to task description
