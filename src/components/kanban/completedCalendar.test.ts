@@ -28,7 +28,7 @@ describe('completedCalendar utilities', () => {
     expect(keys[6]).toBe('2026-02-12');
   });
 
-  it('groups only completed tasks by updated_at day key and sorts descending', () => {
+  it('groups only completed tasks by completion day key and sorts descending', () => {
     const dayKeys = buildDayKeys(new Date(2026, 1, 18, 12, 0, 0), 7);
 
     const completedTodayOlder: Task = {
@@ -82,6 +82,54 @@ describe('completedCalendar utilities', () => {
     ]);
     expect(grouped['2026-02-17'].map(task => task.id)).toEqual(['completed-yesterday']);
     expect(grouped['2026-02-16']).toEqual([]);
+  });
+
+  it('uses stored completion timestamp when present instead of updated_at', () => {
+    const dayKeys = buildDayKeys(new Date(2026, 1, 18, 12, 0, 0), 7);
+    const completedYesterdayEditedToday: Task = {
+      ...baseTask,
+      id: 'completed-yesterday-edited-today',
+      status: 'completed',
+      custom_field_values: {
+        __completed_at: new Date(2026, 1, 17, 9, 0, 0).toISOString(),
+      },
+      updated_at: new Date(2026, 1, 18, 10, 0, 0).toISOString(),
+    };
+
+    const grouped = groupCompletedTasksByDay([completedYesterdayEditedToday], dayKeys);
+
+    expect(grouped['2026-02-17'].map(task => task.id)).toEqual(['completed-yesterday-edited-today']);
+    expect(grouped['2026-02-18']).toEqual([]);
+  });
+
+  it('sorts within a completion day by completion timestamp, not updated_at', () => {
+    const dayKeys = buildDayKeys(new Date(2026, 1, 18, 12, 0, 0), 7);
+    const completedLaterButEditedEarlier: Task = {
+      ...baseTask,
+      id: 'completed-later-edited-earlier',
+      custom_field_values: {
+        __completed_at: new Date(2026, 1, 17, 20, 0, 0).toISOString(),
+      },
+      updated_at: new Date(2026, 1, 17, 21, 0, 0).toISOString(),
+    };
+    const completedEarlierButEditedLater: Task = {
+      ...baseTask,
+      id: 'completed-earlier-edited-later',
+      custom_field_values: {
+        __completed_at: new Date(2026, 1, 17, 9, 0, 0).toISOString(),
+      },
+      updated_at: new Date(2026, 1, 18, 8, 0, 0).toISOString(),
+    };
+
+    const grouped = groupCompletedTasksByDay(
+      [completedEarlierButEditedLater, completedLaterButEditedEarlier],
+      dayKeys
+    );
+
+    expect(grouped['2026-02-17'].map(task => task.id)).toEqual([
+      'completed-later-edited-earlier',
+      'completed-earlier-edited-later',
+    ]);
   });
 
   it('returns completed tasks for the day sorted by priority, then created_at descending', () => {

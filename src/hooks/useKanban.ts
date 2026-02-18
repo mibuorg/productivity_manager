@@ -4,6 +4,7 @@ import { compareTasksByPriorityAndCreatedAtDesc } from '@/components/kanban/task
 import { toast } from 'sonner';
 
 const ESTIMATED_MINUTES_KEY = '__estimated_minutes';
+const COMPLETED_AT_KEY = '__completed_at';
 const LOCAL_STATE_ENDPOINT = '/api/local-state';
 
 type LocalStatePayload = {
@@ -54,12 +55,25 @@ const normalizeTags = (tags: unknown): string[] => {
   return [];
 };
 
-const withEstimatedMinutes = (task: Task): Task => ({
-  ...task,
-  tags: normalizeTags(task.tags),
-  custom_field_values: task.custom_field_values || {},
-  estimated_minutes: getEstimatedMinutes(task.custom_field_values),
-});
+const toValidDateString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? null : value;
+};
+
+const withEstimatedMinutes = (task: Task): Task => {
+  const normalizedUpdatedAt = toValidDateString(task.updated_at) ?? new Date().toISOString();
+  const normalizedCreatedAt = toValidDateString(task.created_at) ?? normalizedUpdatedAt;
+
+  return {
+    ...task,
+    created_at: normalizedCreatedAt,
+    updated_at: normalizedUpdatedAt,
+    tags: normalizeTags(task.tags),
+    custom_field_values: task.custom_field_values || {},
+    estimated_minutes: getEstimatedMinutes(task.custom_field_values),
+  };
+};
 
 const normalizeCustomField = (field: CustomFieldDefinition): CustomFieldDefinition => ({
   ...field,
@@ -205,6 +219,14 @@ export function useKanban() {
           ? taskData.estimated_minutes
           : null;
       const timestamp = new Date().toISOString();
+      const nextCustomFieldValues = { ...(taskData.custom_field_values || {}) };
+
+      if (status === 'completed') {
+        const completedAt = toValidDateString(nextCustomFieldValues[COMPLETED_AT_KEY]) ?? timestamp;
+        nextCustomFieldValues[COMPLETED_AT_KEY] = completedAt;
+      } else {
+        delete nextCustomFieldValues[COMPLETED_AT_KEY];
+      }
 
       const newTask: Task = {
         id: createId(),
@@ -218,7 +240,7 @@ export function useKanban() {
         tags: normalizeTags(taskData.tags),
         assignee: taskData.assignee || '',
         position,
-        custom_field_values: buildCustomFieldValues(taskData.custom_field_values, estimatedMinutes),
+        custom_field_values: buildCustomFieldValues(nextCustomFieldValues, estimatedMinutes),
         pomodoros_completed: taskData.pomodoros_completed || 0,
         created_at: timestamp,
         updated_at: timestamp,
@@ -253,12 +275,23 @@ export function useKanban() {
             : updates.custom_field_values
               ? getEstimatedMinutes(updates.custom_field_values)
               : existingTask.estimated_minutes ?? getEstimatedMinutes(existingTask.custom_field_values);
+      const nextStatus = updates.status ?? existingTask.status;
+      const nextCustomFieldValues = { ...(updates.custom_field_values ?? existingTask.custom_field_values ?? {}) };
+      const existingCompletedAt = toValidDateString(existingTask.custom_field_values?.[COMPLETED_AT_KEY]);
+      const updateCompletedAt = toValidDateString(nextCustomFieldValues[COMPLETED_AT_KEY]);
+      const legacyCompletedAt = existingTask.status === 'completed' ? toValidDateString(existingTask.updated_at) : null;
+
+      if (nextStatus === 'completed') {
+        nextCustomFieldValues[COMPLETED_AT_KEY] = updateCompletedAt ?? existingCompletedAt ?? legacyCompletedAt ?? new Date().toISOString();
+      } else {
+        delete nextCustomFieldValues[COMPLETED_AT_KEY];
+      }
 
       const updatedTask: Task = withEstimatedMinutes({
         ...existingTask,
         ...updates,
         custom_field_values: buildCustomFieldValues(
-          updates.custom_field_values ?? existingTask.custom_field_values,
+          nextCustomFieldValues,
           estimatedMinutes
         ),
         estimated_minutes: estimatedMinutes ?? null,
@@ -309,10 +342,19 @@ export function useKanban() {
       if (!task) return;
 
       const targetTasks = tasks.filter(t => t.status === newStatus && t.id !== taskId);
+      const nextCustomFieldValues = { ...(task.custom_field_values || {}) };
+      const existingCompletedAt = toValidDateString(nextCustomFieldValues[COMPLETED_AT_KEY]);
+      if (newStatus === 'completed') {
+        nextCustomFieldValues[COMPLETED_AT_KEY] = existingCompletedAt ?? new Date().toISOString();
+      } else {
+        delete nextCustomFieldValues[COMPLETED_AT_KEY];
+      }
+
       const movedTask: Task = {
         ...task,
         status: newStatus,
         position: targetTasks.length,
+        custom_field_values: nextCustomFieldValues,
         updated_at: new Date().toISOString(),
       };
 

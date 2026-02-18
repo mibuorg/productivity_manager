@@ -100,12 +100,17 @@ export function TaskCard({
   };
 
   const dateInfo = formatDate(task.due_date);
+  const createdAtTimestamp = new Date(task.created_at).getTime();
+  const createdAtEpoch = Number.isNaN(createdAtTimestamp) ? undefined : String(createdAtTimestamp);
 
   return (
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onCardClick?.(task)}
+      data-task-id={task.id}
+      data-task-created-at={task.created_at}
+      data-task-created-at-ts={createdAtEpoch}
       className={`
         glass-card card-shadow rounded-xl p-4 cursor-grab active:cursor-grabbing
         transition-all duration-200 group

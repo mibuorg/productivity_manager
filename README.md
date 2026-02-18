@@ -12,14 +12,16 @@ Single-user, local-first productivity app with a Kanban board and task-level foc
 - One-click timer start:
   - Starts countdown immediately
   - Moves task from `To Do` to `In Progress`
-- Focus timer supports per-mode editable durations (`Focus`, `Short Break`, `Long Break`)
-- Focus timer mode durations persist per user in browser localStorage
+- Focus timer is a single editable `Break` timer (default 10 minutes)
+- Break duration preference persists per user in browser localStorage
 - Persistent per-task timers (multiple active at once)
 - Active timer remaining time shown directly on task cards
 - Timer note entry appends bullet points to task description
 - `Task Completed` action inside timer UI
 - Completion prompt at timer end to move task to `Completed` or keep `In Progress`
 - Completed Calendar view
+- Completed-day history uses stable completion metadata so editing a completed task does not move it to a new day
+- Task cards expose creation metadata attributes (`data-task-created-at`, `data-task-created-at-ts`) for chronological features
 - AI panel is enabled only when the server has internet access (`/api/internet-status`)
 
 ## Local-Only Data Model

@@ -127,6 +127,82 @@ describe('useKanban', () => {
     expect(result.current.tasks[0]?.tags).toEqual(['docs']);
   });
 
+  it('normalizes missing created_at on legacy tasks using updated_at', async () => {
+    const legacyTask = {
+      ...initialState.tasks[0],
+      created_at: undefined,
+      updated_at: '2026-02-16T08:30:00.000Z',
+    } as unknown as Task;
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...initialState,
+        tasks: [legacyTask],
+      }),
+    });
+
+    const { result } = renderHook(() => useKanban());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.tasks[0]?.created_at).toBe('2026-02-16T08:30:00.000Z');
+  });
+
+  it('preserves completion day metadata when editing an already completed task', async () => {
+    const completedState: LocalStateResponse = {
+      ...initialState,
+      tasks: [
+        {
+          id: 'completed-1',
+          board_id: 'board-1',
+          title: 'Completed task',
+          description: '',
+          status: 'completed',
+          priority: 'medium',
+          due_date: null,
+          tags: ['old'],
+          assignee: '',
+          position: 0,
+          custom_field_values: {},
+          pomodoros_completed: 0,
+          created_at: '2026-02-15T00:00:00.000Z',
+          updated_at: '2026-02-16T09:00:00.000Z',
+        },
+      ],
+    };
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => completedState,
+    });
+
+    const { result } = renderHook(() => useKanban());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.updateTask('completed-1', { tags: ['updated-tag'] });
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    const putCall = fetchMock.mock.calls[1];
+    const body = JSON.parse((putCall[1] as RequestInit).body as string) as LocalStateResponse;
+    const persistedTask = body.tasks.find(task => task.id === 'completed-1');
+
+    expect(persistedTask?.status).toBe('completed');
+    expect((persistedTask?.custom_field_values as Record<string, string>)?.__completed_at).toBe(
+      '2026-02-16T09:00:00.000Z'
+    );
+  });
+
   it('reindexes destination column positions by priority and created_at when moving a task', async () => {
     const moveState: LocalStateResponse = {
       ...initialState,

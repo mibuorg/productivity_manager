@@ -2,15 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
-type PomodoroMode = 'work' | 'shortBreak' | 'longBreak';
-type PomodoroSettings = Record<PomodoroMode, number>;
-
-const DEFAULT_TIMER_SETTINGS: PomodoroSettings = {
-    work: 25 * 60,
-    shortBreak: 5 * 60,
-    longBreak: 15 * 60,
-};
-
+const DEFAULT_DURATION_SECONDS = 10 * 60;
 const SETTINGS_STORAGE_KEY = 'pomodoro_settings';
 const MIN_DURATION_SECONDS = 60;
 const MAX_DURATION_SECONDS = 24 * 60 * 60;
@@ -20,25 +12,30 @@ const getDurationSeconds = (value: unknown, fallback: number) => {
     return Math.min(MAX_DURATION_SECONDS, Math.max(MIN_DURATION_SECONDS, Math.floor(value)));
 };
 
-const parseSettings = (rawSettings: string | null): PomodoroSettings => {
-    if (!rawSettings) return DEFAULT_TIMER_SETTINGS;
+const parseDuration = (rawSettings: string | null): number => {
+    if (!rawSettings) return DEFAULT_DURATION_SECONDS;
 
     try {
-        const parsed = JSON.parse(rawSettings) as Partial<Record<PomodoroMode, number>>;
-        return {
-            work: getDurationSeconds(parsed.work, DEFAULT_TIMER_SETTINGS.work),
-            shortBreak: getDurationSeconds(parsed.shortBreak, DEFAULT_TIMER_SETTINGS.shortBreak),
-            longBreak: getDurationSeconds(parsed.longBreak, DEFAULT_TIMER_SETTINGS.longBreak),
-        };
+        const parsed = JSON.parse(rawSettings) as unknown;
+
+        if (typeof parsed === 'number') {
+            return getDurationSeconds(parsed, DEFAULT_DURATION_SECONDS);
+        }
+
+        if (parsed && typeof parsed === 'object') {
+            const legacy = parsed as Partial<Record<'break' | 'work', number>>;
+            return getDurationSeconds(legacy.break ?? legacy.work, DEFAULT_DURATION_SECONDS);
+        }
     } catch {
-        return DEFAULT_TIMER_SETTINGS;
+        return DEFAULT_DURATION_SECONDS;
     }
+
+    return DEFAULT_DURATION_SECONDS;
 };
 
 export const usePomodoro = () => {
-    const [mode, setMode] = useState<PomodoroMode>('work');
-    const [settings, setSettings] = useState<PomodoroSettings>(DEFAULT_TIMER_SETTINGS);
-    const [timeLeft, setTimeLeft] = useState(DEFAULT_TIMER_SETTINGS.work);
+    const [durationSeconds, setDurationSeconds] = useState(DEFAULT_DURATION_SECONDS);
+    const [timeLeft, setTimeLeft] = useState(DEFAULT_DURATION_SECONDS);
     const [isActive, setIsActive] = useState(false);
 
     // Ref to track end time for persistence logic
@@ -46,16 +43,11 @@ export const usePomodoro = () => {
 
     // Load state from local storage on mount
     useEffect(() => {
-        const savedSettings = parseSettings(localStorage.getItem(SETTINGS_STORAGE_KEY));
-        setSettings(savedSettings);
-
-        const savedMode = localStorage.getItem('pomodoro_mode') as PomodoroMode | null;
+        const savedDuration = parseDuration(localStorage.getItem(SETTINGS_STORAGE_KEY));
+        setDurationSeconds(savedDuration);
         const savedTimeLeft = localStorage.getItem('pomodoro_timeLeft');
         const savedIsActive = localStorage.getItem('pomodoro_isActive') === 'true';
         const savedExpectedEndTime = localStorage.getItem('pomodoro_expectedEndTime');
-
-        const initialMode = savedMode ?? 'work';
-        setMode(initialMode);
 
         if (savedIsActive && savedExpectedEndTime) {
             // Timer was running, calculate remaining time
@@ -75,21 +67,20 @@ export const usePomodoro = () => {
         } else if (savedTimeLeft) {
             // Timer was paused
             const parsedTimeLeft = parseInt(savedTimeLeft, 10);
-            setTimeLeft(Number.isFinite(parsedTimeLeft) ? Math.max(0, parsedTimeLeft) : savedSettings[initialMode]);
+            setTimeLeft(Number.isFinite(parsedTimeLeft) ? Math.max(0, parsedTimeLeft) : savedDuration);
             setIsActive(false);
         } else {
-            setTimeLeft(savedSettings[initialMode]);
+            setTimeLeft(savedDuration);
         }
     }, []);
 
-    // Save mode duration settings for future sessions
+    // Save preferred duration for future sessions
     useEffect(() => {
-        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-    }, [settings]);
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ break: durationSeconds }));
+    }, [durationSeconds]);
 
     // Save state to local storage whenever it changes
     useEffect(() => {
-        localStorage.setItem('pomodoro_mode', mode);
         localStorage.setItem('pomodoro_timeLeft', timeLeft.toString());
         localStorage.setItem('pomodoro_isActive', isActive.toString());
 
@@ -98,7 +89,7 @@ export const usePomodoro = () => {
         } else {
             localStorage.removeItem('pomodoro_expectedEndTime');
         }
-    }, [mode, timeLeft, isActive]);
+    }, [timeLeft, isActive]);
 
     useEffect(() => {
         let interval: NodeJS.Timeout | null = null;
@@ -137,10 +128,9 @@ export const usePomodoro = () => {
     const handleTimerComplete = () => {
         setIsActive(false);
         expectedEndTimeRef.current = null;
-        toast.success('Pomodoro complete!', {
-            description: mode === 'work' ? 'Time for a break.' : 'Back to work!',
+        toast.success('Break complete!', {
+            description: 'Reset when you are ready for the next break.',
         });
-        // Play sound? (Future)
     };
 
     const toggleTimer = () => {
@@ -159,39 +149,23 @@ export const usePomodoro = () => {
     const resetTimer = () => {
         setIsActive(false);
         expectedEndTimeRef.current = null;
-        setTimeLeft(settings[mode]);
+        setTimeLeft(durationSeconds);
     };
 
-    const switchMode = (newMode: PomodoroMode) => {
-        setMode(newMode);
+    const setDuration = (nextDurationSeconds: number) => {
+        const normalizedDuration = getDurationSeconds(nextDurationSeconds, durationSeconds);
+        setDurationSeconds(normalizedDuration);
         setIsActive(false);
         expectedEndTimeRef.current = null;
-        setTimeLeft(settings[newMode]);
-    };
-
-    const setModeDuration = (targetMode: PomodoroMode, durationSeconds: number) => {
-        const normalizedDuration = getDurationSeconds(durationSeconds, settings[targetMode]);
-
-        setSettings((previousSettings) => ({
-            ...previousSettings,
-            [targetMode]: normalizedDuration,
-        }));
-
-        if (targetMode === mode) {
-            setIsActive(false);
-            expectedEndTimeRef.current = null;
-            setTimeLeft(normalizedDuration);
-        }
+        setTimeLeft(normalizedDuration);
     };
 
     return {
-        mode,
         timeLeft,
-        settings,
+        durationSeconds,
         isActive,
         toggleTimer,
         resetTimer,
-        switchMode,
-        setModeDuration,
+        setDuration,
     };
 };

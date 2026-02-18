@@ -40,6 +40,23 @@ describe('TaskCard', () => {
     expect(screen.getByText('45 min')).toBeInTheDocument();
   });
 
+  it('adds created-at metadata attributes on the card element', () => {
+    const { container } = render(
+      <TaskCard
+        task={baseTask}
+        customFields={[]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onMove={vi.fn()}
+      />
+    );
+
+    const card = container.querySelector('.glass-card');
+    expect(card).toHaveAttribute('data-task-id', 'task-1');
+    expect(card).toHaveAttribute('data-task-created-at', '2026-02-17T00:00:00.000Z');
+    expect(card).toHaveAttribute('data-task-created-at-ts', '1771286400000');
+  });
+
   it('shows task tags with original capitalization and time badge styling', () => {
     render(
       <TaskCard

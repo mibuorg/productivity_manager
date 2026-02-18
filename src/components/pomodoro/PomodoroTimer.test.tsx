@@ -31,25 +31,28 @@ describe('PomodoroTimer', () => {
     });
   });
 
-  it('allows editing the selected mode duration from the timer display and persists it', () => {
+  it('defaults to 10 minutes, allows editing break duration, and persists it', () => {
     render(<PomodoroTimer />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Focus duration' }));
-    const minutesInput = screen.getByLabelText('Focus minutes');
-    fireEvent.change(minutesInput, { target: { value: '40' } });
+    expect(screen.getByText('10:00')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Break duration' }));
+    const minutesInput = screen.getByLabelText('Break minutes');
+    fireEvent.change(minutesInput, { target: { value: '15' } });
     fireEvent.keyDown(minutesInput, { key: 'Enter' });
 
-    expect(screen.getByText('40:00')).toBeInTheDocument();
-    expect(storage.get('pomodoro_settings')).toContain('"work":2400');
+    expect(screen.getByText('15:00')).toBeInTheDocument();
+    expect(storage.get('pomodoro_settings')).toContain('"break":900');
   });
 
-  it('uses saved mode durations and keeps the mode switcher padded inside its border', () => {
-    storage.set('pomodoro_settings', JSON.stringify({ work: 1500, shortBreak: 300, longBreak: 1800 }));
+  it('uses saved break duration and shows a static break header', () => {
+    storage.set('pomodoro_settings', JSON.stringify({ break: 1800 }));
 
     render(<PomodoroTimer />);
-    fireEvent.click(screen.getByRole('button', { name: 'Long Break' }));
 
     expect(screen.getByText('30:00')).toBeInTheDocument();
-    expect(screen.getByTestId('pomodoro-mode-switcher')).toHaveClass('p-1');
+    expect(screen.getByTestId('pomodoro-break-header')).toHaveTextContent('Break');
+    expect(screen.queryByRole('button', { name: 'Focus' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Short Break' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Long Break' })).not.toBeInTheDocument();
   });
 });
