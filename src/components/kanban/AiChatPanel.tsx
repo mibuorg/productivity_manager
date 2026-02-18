@@ -3,8 +3,6 @@ import { X, Send, Bot, User, Loader2, Sparkles, ChevronRight } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Task, Board } from '@/types/kanban';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 
 interface AiChatPanelProps {
@@ -28,10 +26,75 @@ const SUGGESTIONS = [
   'What should I focus on today?',
 ];
 
+const summarizeTaskCounts = (tasks: Task[]) => {
+  const todo = tasks.filter(task => task.status === 'todo').length;
+  const inProgress = tasks.filter(task => task.status === 'in_progress').length;
+  const completed = tasks.filter(task => task.status === 'completed').length;
+  return `You currently have ${todo} in To Do, ${inProgress} in progress, and ${completed} completed.`;
+};
+
+const parseCreateTaskPrompt = (message: string) => {
+  const match = message.match(/create (?:a )?task(?: to)?\s+(.+)/i);
+  return match?.[1]?.trim() || '';
+};
+
+const overdueTasks = (tasks: Task[]) => {
+  const now = new Date();
+  return tasks.filter(task => {
+    if (!task.due_date || task.status === 'completed') return false;
+    const due = new Date(task.due_date);
+    return Number.isFinite(due.getTime()) && due < now;
+  });
+};
+
+const getFocusSuggestion = (tasks: Task[]) => {
+  const active = tasks
+    .filter(task => task.status !== 'completed')
+    .sort((a, b) => {
+      const priorityRank = { urgent: 4, high: 3, medium: 2, low: 1 };
+      return priorityRank[b.priority] - priorityRank[a.priority];
+    });
+  return active[0] ?? null;
+};
+
+const buildLocalReply = (message: string, tasks: Task[], boardName: string, onTaskCreate?: (taskData: Partial<Task>) => void) => {
+  const text = message.trim().toLowerCase();
+
+  const newTaskTitle = parseCreateTaskPrompt(message);
+  if (newTaskTitle && onTaskCreate) {
+    onTaskCreate({ title: newTaskTitle, status: 'todo', priority: 'medium' });
+    return `Added "${newTaskTitle}" to To Do on ${boardName}.`;
+  }
+
+  if (text.includes('overdue')) {
+    const overdue = overdueTasks(tasks);
+    if (!overdue.length) {
+      return 'You currently have no overdue tasks.';
+    }
+    return `Overdue tasks:\n${overdue.map(task => `- ${task.title}`).join('\n')}`;
+  }
+
+  if (text.includes('summarize') || text.includes('summary')) {
+    return `${summarizeTaskCounts(tasks)} Total tasks: ${tasks.length}.`;
+  }
+
+  if (text.includes('focus')) {
+    const suggestion = getFocusSuggestion(tasks);
+    if (!suggestion) {
+      return 'Everything is complete. Add a new task to keep momentum.';
+    }
+    return `Focus suggestion: "${suggestion.title}" (${suggestion.priority} priority, ${suggestion.status.replace('_', ' ')}).`;
+  }
+
+  return `${summarizeTaskCounts(tasks)} I can also help with overdue checks, summaries, and creating tasks locally.`;
+};
+
 export function AiChatPanel({ open, onClose, board, tasks, onTaskCreate }: AiChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingConnectivity, setIsCheckingConnectivity] = useState(false);
+  const [isServerOnline, setIsServerOnline] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -45,6 +108,44 @@ export function AiChatPanel({ open, onClose, board, tasks, onTaskCreate }: AiCha
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    let mounted = true;
+    const checkConnectivity = async () => {
+      setIsCheckingConnectivity(true);
+      try {
+        const response = await fetch('/api/internet-status', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          if (mounted) setIsServerOnline(false);
+          return;
+        }
+        const payload = await response.json() as { online?: boolean };
+        if (mounted) {
+          setIsServerOnline(Boolean(payload.online));
+        }
+      } catch {
+        if (mounted) setIsServerOnline(false);
+      } finally {
+        if (mounted) setIsCheckingConnectivity(false);
+      }
+    };
+
+    void checkConnectivity();
+    const intervalId = window.setInterval(() => {
+      void checkConnectivity();
+    }, 30000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [open]);
+
   const buildBoardContext = () => ({
     boardName: board?.name || 'Kanban Board',
     totalTasks: tasks.length,
@@ -56,7 +157,7 @@ export function AiChatPanel({ open, onClose, board, tasks, onTaskCreate }: AiCha
   });
 
   const send = async (messageText: string) => {
-    if (!messageText.trim() || isLoading) return;
+    if (!messageText.trim() || isLoading || !isServerOnline) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -68,98 +169,16 @@ export function AiChatPanel({ open, onClose, board, tasks, onTaskCreate }: AiCha
     setInput('');
     setIsLoading(true);
 
-    let assistantText = '';
-    const assistantId = (Date.now() + 1).toString();
-
     try {
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kanban-ai`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
-            messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })),
-            boardContext: buildBoardContext(),
-          }),
-        }
-      );
-
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({ error: 'Unknown error' }));
-        if (resp.status === 429 || resp.status === 402) {
-          toast.error(errData.error);
-        } else {
-          toast.error('AI service unavailable. Please try again.');
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      if (!resp.body) throw new Error('No response body');
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = '';
-      let streamDone = false;
-
-      setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }]);
-
-      while (!streamDone) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-          if (line.endsWith('\r')) line = line.slice(0, -1);
-          if (line.startsWith(':') || line.trim() === '') continue;
-          if (!line.startsWith('data: ')) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === '[DONE]') { streamDone = true; break; }
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              assistantText += content;
-              setMessages(prev =>
-                prev.map(m => m.id === assistantId ? { ...m, content: assistantText } : m)
-              );
-            }
-          } catch {
-            textBuffer = line + '\n' + textBuffer;
-            break;
-          }
-        }
-      }
-
-      // Parse action blocks from response
-      const actionMatch = assistantText.match(/```action\n([\s\S]*?)```/);
-      if (actionMatch && onTaskCreate) {
-        try {
-          const action = JSON.parse(actionMatch[1]);
-          if (action.type === 'create_task' && action.data) {
-            onTaskCreate(action.data);
-          }
-        } catch {}
-      }
-
-      // Save to DB if board exists
-      if (board) {
-        await supabase.from('ai_conversations').insert([
-          { board_id: board.id, role: 'user', content: userMsg.content },
-          { board_id: board.id, role: 'assistant', content: assistantText },
-        ]);
-      }
-    } catch (e) {
-      console.error('AI chat error:', e);
-      toast.error('Failed to get AI response. Please try again.');
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const boardContext = buildBoardContext();
+      const assistantText = buildLocalReply(userMsg.content, tasks, boardContext.boardName, onTaskCreate);
+      const assistantMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: assistantText,
+      };
+      setMessages(prev => [...prev, assistantMsg]);
     } finally {
       setIsLoading(false);
     }
@@ -212,7 +231,13 @@ export function AiChatPanel({ open, onClose, board, tasks, onTaskCreate }: AiCha
                     <Bot className="h-6 w-6 text-primary" />
                   </div>
                   <p className="text-sm font-medium text-foreground mb-1">Hello! I'm your Kanban AI</p>
-                  <p className="text-xs text-muted-foreground">I can help you manage tasks, analyze your board, and more.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isCheckingConnectivity
+                      ? 'Checking server internet connection...'
+                      : isServerOnline
+                        ? 'I can help you manage tasks, analyze your board, and more.'
+                        : 'AI assistant requires internet connection from the server.'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide font-medium">Suggestions</p>
@@ -221,7 +246,8 @@ export function AiChatPanel({ open, onClose, board, tasks, onTaskCreate }: AiCha
                       <button
                         key={s}
                         onClick={() => send(s)}
-                        className="w-full text-left text-xs px-3 py-2.5 rounded-lg bg-secondary hover:bg-muted border border-border hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all flex items-center justify-between group"
+                        disabled={!isServerOnline || isCheckingConnectivity || isLoading}
+                        className="w-full text-left text-xs px-3 py-2.5 rounded-lg bg-secondary hover:bg-muted border border-border hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all flex items-center justify-between group disabled:opacity-50 disabled:hover:bg-secondary disabled:hover:border-border"
                       >
                         {s}
                         <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -280,13 +306,14 @@ export function AiChatPanel({ open, onClose, board, tasks, onTaskCreate }: AiCha
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask about your tasks..."
+                disabled={!isServerOnline || isCheckingConnectivity}
                 className="bg-muted border-border text-foreground text-xs resize-none min-h-[40px] max-h-[120px] flex-1 focus:border-primary/50"
                 rows={1}
               />
               <Button
                 size="icon"
                 onClick={() => send(input)}
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || isLoading || !isServerOnline || isCheckingConnectivity}
                 className="h-9 w-9 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
               >
                 {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}

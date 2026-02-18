@@ -1,9 +1,32 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { Task, Board, CustomFieldDefinition, TaskStatus } from '@/types/kanban';
 import { toast } from 'sonner';
 
 const ESTIMATED_MINUTES_KEY = '__estimated_minutes';
+const LOCAL_STATE_ENDPOINT = '/api/local-state';
+
+type LocalStatePayload = {
+  board: Board;
+  tasks: Task[];
+  customFields: CustomFieldDefinition[];
+};
+
+const createId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const createDefaultBoard = (): Board => {
+  const timestamp = new Date().toISOString();
+  return {
+    id: createId(),
+    name: 'Tasks to Complete',
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+};
 
 const getEstimatedMinutes = (customFieldValues: Task['custom_field_values'] | null | undefined): number | null => {
   const rawValue = customFieldValues?.[ESTIMATED_MINUTES_KEY];
@@ -12,8 +35,35 @@ const getEstimatedMinutes = (customFieldValues: Task['custom_field_values'] | nu
 
 const withEstimatedMinutes = (task: Task): Task => ({
   ...task,
+  tags: Array.isArray(task.tags) ? task.tags : [],
+  custom_field_values: task.custom_field_values || {},
   estimated_minutes: getEstimatedMinutes(task.custom_field_values),
 });
+
+const normalizeCustomField = (field: CustomFieldDefinition): CustomFieldDefinition => ({
+  ...field,
+  options: Array.isArray(field.options) ? field.options : [],
+});
+
+const normalizePayload = (payload: unknown): LocalStatePayload => {
+  const fallbackBoard = createDefaultBoard();
+  if (!payload || typeof payload !== 'object') {
+    return { board: fallbackBoard, tasks: [], customFields: [] };
+  }
+
+  const candidate = payload as Partial<LocalStatePayload>;
+  const board =
+    candidate.board && typeof candidate.board === 'object' && typeof candidate.board.id === 'string'
+      ? (candidate.board as Board)
+      : fallbackBoard;
+
+  const tasks = Array.isArray(candidate.tasks) ? (candidate.tasks as Task[]).map(withEstimatedMinutes) : [];
+  const customFields = Array.isArray(candidate.customFields)
+    ? (candidate.customFields as CustomFieldDefinition[]).map(normalizeCustomField)
+    : [];
+
+  return { board, tasks, customFields };
+};
 
 const buildCustomFieldValues = (
   baseValues: Task['custom_field_values'] | null | undefined,
@@ -28,250 +78,293 @@ const buildCustomFieldValues = (
   return values;
 };
 
+const loadLocalState = async (): Promise<LocalStatePayload> => {
+  const response = await fetch(LOCAL_STATE_ENDPOINT, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to load local state (${response.status})`);
+  }
+
+  const payload = await response.json();
+  return normalizePayload(payload);
+};
+
+const saveLocalState = async (payload: LocalStatePayload): Promise<LocalStatePayload> => {
+  const response = await fetch(LOCAL_STATE_ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to persist local state (${response.status})`);
+  }
+
+  const savedPayload = await response.json();
+  return normalizePayload(savedPayload);
+};
+
 export function useKanban() {
   const [board, setBoard] = useState<Board | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const createDefaultBoard = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('boards')
-        .insert({
-          name: 'Tasks to Complete',
-        })
-        .select('*')
-        .single();
-
-      if (error) throw error;
-      setBoard(data as Board);
-      return data as Board;
-    } catch (err) {
-      console.error('Error creating default board:', err);
-      return null;
-    }
-  }, []);
-
-  const fetchBoard = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('boards')
-        .select('*')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw error;
-      if (data) {
-        setBoard(data as Board);
-        return data as Board;
-      }
-      return await createDefaultBoard();
-    } catch (err) {
-      console.error('Error fetching board:', err);
-      return null;
-    }
-  }, [createDefaultBoard]);
-
-  const fetchTasks = useCallback(async (boardId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('board_id', boardId)
-        .order('position', { ascending: true });
-
-      if (error) throw error;
-      const mappedTasks = ((data || []) as Task[]).map(withEstimatedMinutes);
-      setTasks(mappedTasks);
-    } catch (err) {
-      console.error('Error fetching tasks:', err);
-    }
-  }, []);
-
-  const fetchCustomFields = useCallback(async (boardId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('custom_field_definitions')
-        .select('*')
-        .eq('board_id', boardId)
-        .order('position', { ascending: true });
-
-      if (error) throw error;
-      const fields = (data || []).map(f => ({
-        ...f,
-        options: Array.isArray(f.options) ? f.options as string[] : [],
-      })) as CustomFieldDefinition[];
-      setCustomFields(fields);
-    } catch (err) {
-      console.error('Error fetching custom fields:', err);
-    }
+  const applyState = useCallback((state: LocalStatePayload) => {
+    setBoard(state.board);
+    setTasks(state.tasks);
+    setCustomFields(state.customFields);
   }, []);
 
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      const b = await fetchBoard();
-      if (b) {
-        await Promise.all([fetchTasks(b.id), fetchCustomFields(b.id)]);
+      try {
+        const state = await loadLocalState();
+        applyState(state);
+      } catch (error) {
+        console.error('Error loading local kanban state:', error);
+        toast.error('Failed to load local board data');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
+
     void init();
-  }, [fetchBoard, fetchCustomFields, fetchTasks]);
+  }, [applyState]);
 
-  const createTask = useCallback(async (taskData: Partial<Task>) => {
-    if (!board) return;
-    const statusTasks = tasks.filter(t => t.status === (taskData.status || 'todo'));
-    const position = statusTasks.length;
-    const estimatedMinutes =
-      typeof taskData.estimated_minutes === 'number' && taskData.estimated_minutes > 0
-        ? taskData.estimated_minutes
-        : null;
-    const customFieldValues = buildCustomFieldValues(taskData.custom_field_values, estimatedMinutes);
+  const persistState = useCallback(
+    async (nextState: LocalStatePayload) => {
+      const persistedState = await saveLocalState(nextState);
+      applyState(persistedState);
+      return persistedState;
+    },
+    [applyState]
+  );
 
+  const createTask = useCallback(
+    async (taskData: Partial<Task>) => {
+      if (!board) return;
+
+      const status = taskData.status || 'todo';
+      const statusTasks = tasks.filter(t => t.status === status);
+      const position = statusTasks.length;
+      const estimatedMinutes =
+        typeof taskData.estimated_minutes === 'number' && taskData.estimated_minutes > 0
+          ? taskData.estimated_minutes
+          : null;
+      const timestamp = new Date().toISOString();
+
+      const newTask: Task = {
+        id: createId(),
+        board_id: board.id,
+        title: taskData.title || 'New Task',
+        description: taskData.description || '',
+        status,
+        priority: taskData.priority || 'medium',
+        due_date: taskData.due_date || null,
+        estimated_minutes: estimatedMinutes,
+        tags: taskData.tags || [],
+        assignee: taskData.assignee || '',
+        position,
+        custom_field_values: buildCustomFieldValues(taskData.custom_field_values, estimatedMinutes),
+        pomodoros_completed: taskData.pomodoros_completed || 0,
+        created_at: timestamp,
+        updated_at: timestamp,
+      };
+
+      try {
+        await persistState({
+          board,
+          tasks: [...tasks, withEstimatedMinutes(newTask)],
+          customFields,
+        });
+        toast.success('Task created');
+        return newTask;
+      } catch (error) {
+        console.error('Error creating task:', error);
+        toast.error('Failed to create task');
+      }
+    },
+    [board, customFields, persistState, tasks]
+  );
+
+  const updateTask = useCallback(
+    async (taskId: string, updates: Partial<Task>) => {
+      const existingTask = tasks.find(task => task.id === taskId);
+      if (!existingTask || !board) return;
+
+      const estimatedMinutes =
+        typeof updates.estimated_minutes === 'number' && updates.estimated_minutes > 0
+          ? updates.estimated_minutes
+          : updates.estimated_minutes === null
+            ? null
+            : updates.custom_field_values
+              ? getEstimatedMinutes(updates.custom_field_values)
+              : existingTask.estimated_minutes ?? getEstimatedMinutes(existingTask.custom_field_values);
+
+      const updatedTask: Task = withEstimatedMinutes({
+        ...existingTask,
+        ...updates,
+        custom_field_values: buildCustomFieldValues(
+          updates.custom_field_values ?? existingTask.custom_field_values,
+          estimatedMinutes
+        ),
+        estimated_minutes: estimatedMinutes ?? null,
+        updated_at: new Date().toISOString(),
+      } as Task);
+
+      const nextTasks = tasks.map(task => (task.id === taskId ? updatedTask : task));
+
+      try {
+        await persistState({
+          board,
+          tasks: nextTasks,
+          customFields,
+        });
+        return updatedTask;
+      } catch (error) {
+        console.error('Error updating task:', error);
+        toast.error('Failed to update task');
+      }
+    },
+    [board, customFields, persistState, tasks]
+  );
+
+  const deleteTask = useCallback(
+    async (taskId: string) => {
+      if (!board) return;
+      const nextTasks = tasks.filter(task => task.id !== taskId);
+
+      try {
+        await persistState({
+          board,
+          tasks: nextTasks,
+          customFields,
+        });
+        toast.success('Task deleted');
+      } catch (error) {
+        console.error('Error deleting task:', error);
+        toast.error('Failed to delete task');
+      }
+    },
+    [board, customFields, persistState, tasks]
+  );
+
+  const moveTask = useCallback(
+    async (taskId: string, newStatus: TaskStatus) => {
+      if (!board) return;
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      const targetTasks = tasks.filter(t => t.status === newStatus && t.id !== taskId);
+      const movedTask: Task = {
+        ...task,
+        status: newStatus,
+        position: targetTasks.length,
+        updated_at: new Date().toISOString(),
+      };
+
+      const nextTasks = tasks.map(t => (t.id === taskId ? movedTask : t));
+
+      try {
+        await persistState({
+          board,
+          tasks: nextTasks,
+          customFields,
+        });
+      } catch (error) {
+        console.error('Error moving task:', error);
+        toast.error('Failed to move task');
+      }
+    },
+    [board, customFields, persistState, tasks]
+  );
+
+  const createCustomField = useCallback(
+    async (field: Omit<CustomFieldDefinition, 'id' | 'created_at'>) => {
+      if (!board) return;
+
+      const newField: CustomFieldDefinition = {
+        ...field,
+        id: createId(),
+        board_id: board.id,
+        options: Array.isArray(field.options) ? field.options : [],
+        created_at: new Date().toISOString(),
+      };
+
+      try {
+        await persistState({
+          board,
+          tasks,
+          customFields: [...customFields, newField],
+        });
+        toast.success('Custom field created');
+        return newField;
+      } catch (error) {
+        console.error('Error creating custom field:', error);
+        toast.error('Failed to create custom field');
+      }
+    },
+    [board, customFields, persistState, tasks]
+  );
+
+  const deleteCustomField = useCallback(
+    async (fieldId: string) => {
+      if (!board) return;
+      const nextFields = customFields.filter(field => field.id !== fieldId);
+
+      try {
+        await persistState({
+          board,
+          tasks,
+          customFields: nextFields,
+        });
+        toast.success('Field deleted');
+      } catch (error) {
+        console.error('Error deleting custom field:', error);
+      }
+    },
+    [board, customFields, persistState, tasks]
+  );
+
+  const reorderTasks = useCallback(
+    async (reorderedTasks: Task[]) => {
+      if (!board) return;
+
+      const reorderedById = new Map(reorderedTasks.map(task => [task.id, task]));
+      const nextTasks = tasks.map(task => reorderedById.get(task.id) ?? task);
+
+      try {
+        await persistState({
+          board,
+          tasks: nextTasks,
+          customFields,
+        });
+      } catch (error) {
+        console.error('Error reordering tasks:', error);
+      }
+    },
+    [board, customFields, persistState, tasks]
+  );
+
+  const refreshTasks = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert({
-          board_id: board.id,
-          title: taskData.title || 'New Task',
-          description: taskData.description || '',
-          status: taskData.status || 'todo',
-          priority: taskData.priority || 'medium',
-          due_date: taskData.due_date || null,
-          tags: taskData.tags || [],
-          assignee: taskData.assignee || '',
-          position,
-          custom_field_values: customFieldValues,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      const taskWithEstimate = withEstimatedMinutes(data as Task);
-      setTasks(prev => [...prev, taskWithEstimate]);
-      toast.success('Task created');
-      return taskWithEstimate;
-    } catch (err) {
-      console.error('Error creating task:', err);
-      toast.error('Failed to create task');
+      const state = await loadLocalState();
+      applyState(state);
+      return state.tasks;
+    } catch (error) {
+      console.error('Error refreshing tasks:', error);
+      return [];
     }
-  }, [board, tasks]);
-
-  const updateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
-    const existingTask = tasks.find(t => t.id === taskId);
-    const estimatedMinutes =
-      typeof updates.estimated_minutes === 'number' && updates.estimated_minutes > 0
-        ? updates.estimated_minutes
-        : updates.estimated_minutes === null
-          ? null
-          : undefined;
-
-    const updatePayload: Partial<Task> = { ...updates };
-    if (estimatedMinutes !== undefined || updates.custom_field_values !== undefined) {
-      updatePayload.custom_field_values = buildCustomFieldValues(
-        updates.custom_field_values ?? existingTask?.custom_field_values,
-        estimatedMinutes
-      );
-    }
-    delete updatePayload.estimated_minutes;
-
-    try {
-      const { data, error } = await supabase
-        .from('tasks')
-        .update(updatePayload)
-        .eq('id', taskId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      const taskWithEstimate = withEstimatedMinutes(data as Task);
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...taskWithEstimate } as Task : t));
-      return taskWithEstimate;
-    } catch (err) {
-      console.error('Error updating task:', err);
-      toast.error('Failed to update task');
-    }
-  }, [tasks]);
-
-  const deleteTask = useCallback(async (taskId: string) => {
-    try {
-      const { error } = await supabase.from('tasks').delete().eq('id', taskId);
-      if (error) throw error;
-      setTasks(prev => prev.filter(t => t.id !== taskId));
-      toast.success('Task deleted');
-    } catch (err) {
-      console.error('Error deleting task:', err);
-      toast.error('Failed to delete task');
-    }
-  }, []);
-
-  const moveTask = useCallback(async (taskId: string, newStatus: TaskStatus) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-    const targetTasks = tasks.filter(t => t.status === newStatus && t.id !== taskId);
-
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, position: targetTasks.length } : t));
-
-    try {
-      const { error } = await supabase
-        .from('tasks')
-        .update({ status: newStatus, position: targetTasks.length })
-        .eq('id', taskId);
-      if (error) throw error;
-    } catch (err) {
-      setTasks(prev => prev.map(t => t.id === taskId ? task : t));
-      toast.error('Failed to move task');
-    }
-  }, [tasks]);
-
-  const createCustomField = useCallback(async (field: Omit<CustomFieldDefinition, 'id' | 'created_at'>) => {
-    if (!board) return;
-    try {
-      const { data, error } = await supabase
-        .from('custom_field_definitions')
-        .insert({ ...field, board_id: board.id })
-        .select()
-        .single();
-
-      if (error) throw error;
-      const newField = { ...data, options: Array.isArray(data.options) ? data.options as string[] : [] } as CustomFieldDefinition;
-      setCustomFields(prev => [...prev, newField]);
-      toast.success('Custom field created');
-      return newField;
-    } catch (err) {
-      console.error('Error creating custom field:', err);
-      toast.error('Failed to create custom field');
-    }
-  }, [board]);
-
-  const deleteCustomField = useCallback(async (fieldId: string) => {
-    try {
-      const { error } = await supabase.from('custom_field_definitions').delete().eq('id', fieldId);
-      if (error) throw error;
-      setCustomFields(prev => prev.filter(f => f.id !== fieldId));
-      toast.success('Field deleted');
-    } catch (err) {
-      console.error('Error deleting custom field:', err);
-    }
-  }, []);
-
-  const reorderTasks = useCallback(async (reorderedTasks: Task[]) => {
-    setTasks(prev => {
-      const others = prev.filter(t => !reorderedTasks.find(r => r.id === t.id));
-      return [...others, ...reorderedTasks].sort((a, b) => {
-        if (a.status !== b.status) return 0;
-        return a.position - b.position;
-      });
-    });
-
-    const updates = reorderedTasks.map(t =>
-      supabase.from('tasks').update({ position: t.position, status: t.status }).eq('id', t.id)
-    );
-    await Promise.all(updates);
-  }, []);
+  }, [applyState]);
 
   return {
     board,
@@ -285,6 +378,6 @@ export function useKanban() {
     createCustomField,
     deleteCustomField,
     reorderTasks,
-    refreshTasks: () => board && fetchTasks(board.id),
+    refreshTasks,
   };
 }
