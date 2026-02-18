@@ -102,6 +102,8 @@ npm run data:backup-local
 
 Local user-data paths are ignored by git via `.gitignore` (`.private-data/`, `local-data/`, `supabase/backups/`, and backup JSON patterns).
 
+For root/home-level artifact handling guidance, see `docs/local-root-artifacts.md`.
+
 ## Project Structure
 
 - `src/pages` - route-level pages

@@ -41,6 +41,7 @@ supabase/.temp/
 supabase/.branches/
 supabase/.env
 .private-data/
+.private-data/home-root-artifacts/
 local-data/
 supabase/backups/
 *.backup.json
