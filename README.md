@@ -5,6 +5,8 @@ A Supabase-backed productivity app that combines a Kanban board with task-level 
 ## Core Functionality
 
 - Kanban workflow with three columns: `To Do`, `In Progress`, `Completed`
+- Separate `Completed Calendar` view with fixed 7-day columns (today + 6 previous days)
+- Calendar columns always render, including empty days with no completed tasks
 - Drag-and-drop task movement between columns
 - Create, edit, delete, and reorder tasks
 - Task metadata support:
@@ -130,3 +132,4 @@ npm test -- src/components/kanban/TaskPomodoroOverlay.test.tsx
   - `MM:SS` for 60 minutes or less
   - `H:MM:SS` for times over 60 minutes (no leading zero for single-digit hours, e.g. `2:00:00`)
 - Estimated task time is persisted in `tasks.custom_field_values.__estimated_minutes` and mapped to `estimated_minutes` in UI.
+- Completed Calendar grouping uses `tasks.updated_at` for completed tasks (editing a completed task can move it to a newer day bucket).
