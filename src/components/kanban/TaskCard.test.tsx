@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TaskCard } from './TaskCard';
 import { Task } from '@/types/kanban';
 
@@ -21,6 +21,10 @@ const baseTask: Task = {
 };
 
 describe('TaskCard', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('shows the task time estimate badge when estimated minutes are set', () => {
     render(
       <TaskCard
@@ -96,6 +100,25 @@ describe('TaskCard', () => {
     expect(card).not.toHaveClass('opacity-50');
     expect(card).not.toHaveClass('scale-95');
     expect(card).not.toHaveClass('rotate-1');
+  });
+
+  it('does not mark due-today tasks as overdue', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-18T12:00:00.000Z'));
+
+    render(
+      <TaskCard
+        task={{ ...baseTask, due_date: '2026-02-18' }}
+        customFields={[]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onMove={vi.fn()}
+      />
+    );
+
+    const dueDate = screen.getByText('Feb 18');
+    expect(dueDate.closest('div')).toHaveClass('text-muted-foreground');
+    expect(dueDate.closest('div')).not.toHaveClass('text-destructive');
   });
 
   it('provides a next-column touch control for todo tasks', () => {

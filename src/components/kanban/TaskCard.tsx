@@ -37,6 +37,34 @@ const formatActiveTimer = (seconds: number) => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
+const pad2 = (value: number) => value.toString().padStart(2, '0');
+
+const toDayKey = (year: number, month: number, day: number) => (
+  `${year}-${pad2(month)}-${pad2(day)}`
+);
+
+const parseDueDateParts = (dateStr: string | null) => {
+  if (!dateStr) return null;
+
+  const dateOnlyMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateOnlyMatch) {
+    return {
+      year: Number.parseInt(dateOnlyMatch[1], 10),
+      month: Number.parseInt(dateOnlyMatch[2], 10),
+      day: Number.parseInt(dateOnlyMatch[3], 10),
+    };
+  }
+
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return {
+    year: parsed.getFullYear(),
+    month: parsed.getMonth() + 1,
+    day: parsed.getDate(),
+  };
+};
+
 export function TaskCard({
   task,
   customFields,
@@ -59,11 +87,15 @@ export function TaskCard({
     : null;
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return null;
-    const date = new Date(dateStr);
+    const dueParts = parseDueDateParts(dateStr);
+    if (!dueParts) return null;
+
+    const displayDate = new Date(dueParts.year, dueParts.month - 1, dueParts.day, 12, 0, 0);
     const now = new Date();
-    const isOverdue = date < now;
-    const formatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const todayKey = toDayKey(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    const dueKey = toDayKey(dueParts.year, dueParts.month, dueParts.day);
+    const isOverdue = dueKey < todayKey;
+    const formatted = displayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     return { formatted, isOverdue };
   };
 
