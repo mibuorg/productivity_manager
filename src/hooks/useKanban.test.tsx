@@ -2,8 +2,9 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useKanban } from './useKanban';
 
-const { fromMock } = vi.hoisted(() => ({
+const { fromMock, useAuthMock } = vi.hoisted(() => ({
   fromMock: vi.fn(),
+  useAuthMock: vi.fn(),
 }));
 
 vi.mock('@/integrations/supabase/client', () => ({
@@ -12,28 +13,61 @@ vi.mock('@/integrations/supabase/client', () => ({
   },
 }));
 
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: useAuthMock,
+}));
+
 describe('useKanban', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    useAuthMock.mockReturnValue({
+      user: { id: 'user-1' },
+    });
+
     fromMock.mockImplementation((table: string) => {
       if (table === 'boards') {
-        return {
+        const maybeSingle = vi.fn(async () => ({
+          data: {
+            id: 'board-1',
+            name: 'Main Board',
+            owner_id: 'user-1',
+            created_at: '2026-02-17T00:00:00.000Z',
+            updated_at: '2026-02-17T00:00:00.000Z',
+          },
+          error: null,
+        }));
+
+        const insert = () => ({
           select: () => ({
-            order: () => ({
-              limit: () => ({
-                single: async () => ({
-                  data: {
-                    id: 'board-1',
-                    name: 'Main Board',
-                    created_at: '2026-02-17T00:00:00.000Z',
-                    updated_at: '2026-02-17T00:00:00.000Z',
-                  },
-                  error: null,
-                }),
-              }),
+            single: async () => ({
+              data: {
+                id: 'board-created',
+                name: 'Tasks to Complete',
+                owner_id: 'user-1',
+                created_at: '2026-02-17T00:00:00.000Z',
+                updated_at: '2026-02-17T00:00:00.000Z',
+              },
+              error: null,
             }),
           }),
+        });
+
+        return {
+          select: () => ({
+            eq: (column: string, value: string) => {
+              expect(column).toBe('owner_id');
+              expect(value).toBe('user-1');
+              return {
+                order: () => ({
+                  limit: () => ({
+                    maybeSingle,
+                  }),
+                }),
+              };
+            },
+          }),
+          insert,
         };
       }
 
@@ -83,7 +117,7 @@ describe('useKanban', () => {
     });
   });
 
-  it('loads board/tasks/custom fields from supabase on mount', async () => {
+  it('loads user-scoped board/tasks/custom fields from supabase on mount', async () => {
     const { result } = renderHook(() => useKanban());
 
     await waitFor(() => {
@@ -101,5 +135,22 @@ describe('useKanban', () => {
     expect(current.customFields).toEqual([]);
     expect(fromMock).toHaveBeenCalledWith('tasks');
     expect(fromMock).toHaveBeenCalledWith('custom_field_definitions');
+  });
+
+  it('does not query supabase when there is no authenticated user', async () => {
+    useAuthMock.mockReturnValue({
+      user: null,
+    });
+
+    const { result } = renderHook(() => useKanban());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(result.current.board).toBeNull();
+    expect(result.current.tasks).toEqual([]);
+    expect(result.current.customFields).toEqual([]);
   });
 });

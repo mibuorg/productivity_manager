@@ -50,6 +50,36 @@ describe('TaskCard', () => {
     expect(screen.queryByText('45 min')).not.toBeInTheDocument();
   });
 
+  it('shows active timer remaining time when a task timer is running', () => {
+    render(
+      <TaskCard
+        task={baseTask}
+        customFields={[]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onMove={vi.fn()}
+        activeTimerSeconds={125}
+      />
+    );
+
+    expect(screen.getByText('02:05 left')).toBeInTheDocument();
+  });
+
+  it('shows h:mm:ss active timer format when the remaining time exceeds 60 minutes', () => {
+    render(
+      <TaskCard
+        task={baseTask}
+        customFields={[]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onMove={vi.fn()}
+        activeTimerSeconds={3661}
+      />
+    );
+
+    expect(screen.getByText('1:01:01 left')).toBeInTheDocument();
+  });
+
   it('does not apply faded or tilted styling while dragging', () => {
     const { container } = render(
       <TaskCard

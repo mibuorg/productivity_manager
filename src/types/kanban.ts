@@ -33,6 +33,7 @@ export interface Task {
 export interface Board {
   id: string;
   name: string;
+  owner_id?: string | null;
   created_at: string;
   updated_at: string;
 }

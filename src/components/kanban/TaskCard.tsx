@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Tag, User, MoreHorizontal, Trash2, Edit3, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, User, MoreHorizontal, Trash2, Edit3, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Task, PRIORITY_CONFIG, TaskStatus, CustomFieldDefinition, COLUMNS } from '@/types/kanban';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,12 +21,36 @@ interface TaskCardProps {
   onMove: (taskId: string, status: TaskStatus) => void;
   onCardClick?: (task: Task) => void;
   isDragging?: boolean;
+  activeTimerSeconds?: number;
 }
 
-export function TaskCard({ task, customFields, onEdit, onDelete, onMove, onCardClick, isDragging }: TaskCardProps) {
+const formatActiveTimer = (seconds: number) => {
+  if (seconds > 3600) {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
+export function TaskCard({
+  task,
+  customFields,
+  onEdit,
+  onDelete,
+  onMove,
+  onCardClick,
+  isDragging,
+  activeTimerSeconds,
+}: TaskCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const priority = PRIORITY_CONFIG[task.priority];
   const hasEstimatedMinutes = typeof task.estimated_minutes === 'number' && task.estimated_minutes > 0;
+  const hasActiveTimer = typeof activeTimerSeconds === 'number' && activeTimerSeconds > 0;
   const otherColumns = COLUMNS.filter(c => c.id !== task.status);
   const currentColumnIndex = COLUMNS.findIndex(column => column.id === task.status);
   const previousColumn = currentColumnIndex > 0 ? COLUMNS[currentColumnIndex - 1] : null;
@@ -71,6 +95,11 @@ export function TaskCard({ task, customFields, onEdit, onDelete, onMove, onCardC
           >
             {priority.label}
           </span>
+          {hasActiveTimer && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide bg-primary/20 text-primary border border-primary/30">
+              {formatActiveTimer(activeTimerSeconds)} left
+            </span>
+          )}
           {hasEstimatedMinutes && (
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide bg-secondary text-secondary-foreground">
               {task.estimated_minutes} min

@@ -22,6 +22,10 @@ A Supabase-backed productivity app that combines a Kanban board with task-level 
     - `Completed` moves task to `Completed`
     - `Not yet` keeps task in `In Progress`
 - Sidebar focus timer widget
+- Account authentication:
+  - Top-right `Account` menu
+  - `Log in / Sign up` and `Log out` actions
+  - Per-user board isolation via Supabase auth + RLS
 - Optional AI assistant panel for task suggestions and board analysis
 
 ## Tech Stack
@@ -42,9 +46,10 @@ npm install
 
 ### 2. Configure environment variables
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (you can copy from `.env.example`):
 
 ```bash
+VITE_SUPABASE_PROJECT_ID=your_supabase_project_id
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
 ```
@@ -66,6 +71,7 @@ Useful SQL files in this repo:
 - `src/integrations/supabase/schema.sql` (baseline schema)
 - `src/integrations/supabase/migrations/01_fix_tasks_columns.sql` (repair migration for missing task columns)
 - `supabase/migrations/20260217200147_d736fe70-38e7-4588-8afc-f8087d758c58.sql` (project migration)
+- `supabase/migrations/20260218173500_auth_per_user_rls.sql` (owner-based auth + RLS migration)
 
 Edge function config is in:
 
@@ -82,6 +88,30 @@ If you use the AI panel, configure the required edge function secret(s) in Supab
 - `npm run lint` - run ESLint
 - `npm run test` - run test suite once
 - `npm run test:watch` - run tests in watch mode
+- `npm run data:backup-public` - export currently public board data to `.private-data/`
+- `npm run data:import-user` - import a backup file into a signed-in user's board
+
+## Migrating Existing Public Data to a User Account
+
+1. Back up current public board data before applying auth RLS:
+
+```bash
+npm run data:backup-public
+```
+
+2. Apply Supabase migrations including:
+
+- `supabase/migrations/20260218173500_auth_per_user_rls.sql`
+
+3. Sign up/log in with your target account in the app.
+
+4. Import the saved backup into that account:
+
+```bash
+npm run data:import-user -- --file .private-data/<your-backup-file>.json --email you@example.com --password 'your-password'
+```
+
+Backup files are ignored by git via `.gitignore` (`.private-data/` and backup JSON patterns).
 
 ## Project Structure
 

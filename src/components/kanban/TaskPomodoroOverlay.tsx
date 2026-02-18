@@ -18,6 +18,8 @@ interface TaskPomodoroOverlayProps {
   onStart: (taskId: string) => Promise<void> | void;
   onAppendNote: (taskId: string, note: string) => Promise<void> | void;
   onCompleteDecision: (taskId: string, completed: boolean) => Promise<void> | void;
+  onTimerElapsed?: (taskId: string) => void;
+  onActiveTimersChange?: (activeTimersByTaskId: Record<string, number>) => void;
 }
 
 const SCENIC_BACKGROUNDS = [
@@ -33,6 +35,107 @@ const hashString = (value: string) => {
     hash |= 0;
   }
   return Math.abs(hash);
+};
+
+const TIMER_STORAGE_KEY = 'task_pomodoro_timers';
+const DEFAULT_TIMER_MINUTES = 25;
+
+interface TaskTimerState {
+  initialSeconds: number;
+  timeLeft: number;
+  isRunning: boolean;
+  hasStarted: boolean;
+  expectedEndTime: number | null;
+  isCompletionPromptOpen: boolean;
+}
+
+type TaskTimersMap = Record<string, TaskTimerState>;
+
+const getTaskInitialSeconds = (task: Task | null) => {
+  const minutes = task?.estimated_minutes && task.estimated_minutes > 0 ? task.estimated_minutes : DEFAULT_TIMER_MINUTES;
+  return minutes * 60;
+};
+
+const createDefaultTaskTimer = (initialSeconds: number): TaskTimerState => ({
+  initialSeconds,
+  timeLeft: initialSeconds,
+  isRunning: false,
+  hasStarted: false,
+  expectedEndTime: null,
+  isCompletionPromptOpen: false,
+});
+
+const getBrowserStorage = () => {
+  if (typeof window === 'undefined') return null;
+  const storage = window.localStorage as Partial<Storage> | undefined;
+  if (!storage || typeof storage.getItem !== 'function' || typeof storage.setItem !== 'function') {
+    return null;
+  }
+  return storage as Storage;
+};
+
+const loadTimersFromStorage = (): TaskTimersMap => {
+  const storage = getBrowserStorage();
+  if (!storage) return {};
+
+  try {
+    const raw = storage.getItem(TIMER_STORAGE_KEY);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as TaskTimersMap;
+    if (!parsed || typeof parsed !== 'object') return {};
+
+    const now = Date.now();
+    const loaded: TaskTimersMap = {};
+
+    Object.entries(parsed).forEach(([taskId, timer]) => {
+      if (!timer || typeof timer !== 'object') return;
+
+      const initialSeconds =
+        typeof timer.initialSeconds === 'number' && timer.initialSeconds > 0
+          ? timer.initialSeconds
+          : DEFAULT_TIMER_MINUTES * 60;
+
+      const parsedTimeLeft =
+        typeof timer.timeLeft === 'number' && Number.isFinite(timer.timeLeft) && timer.timeLeft >= 0
+          ? timer.timeLeft
+          : initialSeconds;
+
+      const isRunning = Boolean(timer.isRunning);
+      const hasStarted = Boolean(timer.hasStarted);
+      const expectedEndTime =
+        typeof timer.expectedEndTime === 'number' && Number.isFinite(timer.expectedEndTime)
+          ? timer.expectedEndTime
+          : null;
+
+      if (isRunning && expectedEndTime) {
+        const remaining = Math.max(0, Math.floor((expectedEndTime - now) / 1000));
+        loaded[taskId] = {
+          initialSeconds,
+          timeLeft: remaining,
+          isRunning: remaining > 0,
+          hasStarted: hasStarted || remaining > 0,
+          expectedEndTime: remaining > 0 ? expectedEndTime : null,
+          isCompletionPromptOpen: remaining === 0 ? true : Boolean(timer.isCompletionPromptOpen),
+        };
+        return;
+      }
+
+      loaded[taskId] = {
+        initialSeconds,
+        timeLeft: Math.max(0, parsedTimeLeft),
+        isRunning: false,
+        hasStarted,
+        expectedEndTime: null,
+        isCompletionPromptOpen: Boolean(timer.isCompletionPromptOpen),
+      };
+    });
+
+    return loaded;
+  } catch (error) {
+    console.error('Failed to load pomodoro timers from storage', error);
+    return {};
+  }
 };
 
 const formatTime = (seconds: number, showHours: boolean) => {
@@ -55,66 +158,204 @@ export function TaskPomodoroOverlay({
   onStart,
   onAppendNote,
   onCompleteDecision,
+  onTimerElapsed,
+  onActiveTimersChange,
 }: TaskPomodoroOverlayProps) {
-  const initialSeconds = useMemo(() => {
-    const minutes = task?.estimated_minutes && task.estimated_minutes > 0 ? task.estimated_minutes : 25;
-    return minutes * 60;
-  }, [task?.estimated_minutes]);
+  const initialSeconds = useMemo(() => getTaskInitialSeconds(task), [task?.estimated_minutes]);
 
   const scenicBackground = useMemo(() => {
     if (!task) return SCENIC_BACKGROUNDS[0];
     return SCENIC_BACKGROUNDS[hashString(task.id) % SCENIC_BACKGROUNDS.length];
   }, [task]);
-  const showHours = initialSeconds > 3600;
-
-  const [timeLeft, setTimeLeft] = useState(initialSeconds);
-  const [isRunning, setIsRunning] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [timersByTaskId, setTimersByTaskId] = useState<TaskTimersMap>(() => loadTimersFromStorage());
   const [noteInput, setNoteInput] = useState('');
-  const [isCompletionPromptOpen, setIsCompletionPromptOpen] = useState(false);
+
+  const activeTaskTimer = task ? timersByTaskId[task.id] : null;
+  const resolvedTimer = activeTaskTimer || createDefaultTaskTimer(initialSeconds);
+  const showHours = resolvedTimer.initialSeconds > 3600;
 
   useEffect(() => {
-    if (!open || !task) return;
-    setTimeLeft(initialSeconds);
-    setIsRunning(false);
-    setHasStarted(false);
-    setNoteInput('');
-    setIsCompletionPromptOpen(false);
-  }, [open, task?.id, initialSeconds, task]);
+    if (!task) return;
+
+    setTimersByTaskId(prev => {
+      const existing = prev[task.id];
+      if (!existing) {
+        return { ...prev, [task.id]: createDefaultTaskTimer(initialSeconds) };
+      }
+
+      if (existing.initialSeconds === initialSeconds) {
+        return prev;
+      }
+
+      if (!existing.hasStarted) {
+        return {
+          ...prev,
+          [task.id]: {
+            ...existing,
+            initialSeconds,
+            timeLeft: initialSeconds,
+          },
+        };
+      }
+
+      return {
+        ...prev,
+        [task.id]: {
+          ...existing,
+          initialSeconds,
+        },
+      };
+    });
+  }, [task?.id, task?.estimated_minutes, initialSeconds]);
 
   useEffect(() => {
-    if (!open || !isRunning) return;
-    if (timeLeft <= 0) return;
-
     const timer = window.setInterval(() => {
-      setTimeLeft(prev => Math.max(0, prev - 1));
+      const now = Date.now();
+      const elapsedTaskIds: string[] = [];
+
+      setTimersByTaskId(prev => {
+        let changed = false;
+        const next: TaskTimersMap = { ...prev };
+
+        Object.entries(prev).forEach(([taskId, timerState]) => {
+          if (!timerState.isRunning) return;
+
+          const expectedEndTime = timerState.expectedEndTime ?? now + timerState.timeLeft * 1000;
+          const remaining = Math.max(0, Math.floor((expectedEndTime - now) / 1000));
+
+          if (remaining === 0) {
+            changed = true;
+            next[taskId] = {
+              ...timerState,
+              timeLeft: 0,
+              isRunning: false,
+              expectedEndTime: null,
+              hasStarted: true,
+              isCompletionPromptOpen: true,
+            };
+            if (!timerState.isCompletionPromptOpen) {
+              elapsedTaskIds.push(taskId);
+            }
+            return;
+          }
+
+          if (remaining !== timerState.timeLeft || expectedEndTime !== timerState.expectedEndTime) {
+            changed = true;
+            next[taskId] = {
+              ...timerState,
+              timeLeft: remaining,
+              expectedEndTime,
+            };
+          }
+        });
+
+        return changed ? next : prev;
+      });
+
+      if (elapsedTaskIds.length > 0 && onTimerElapsed) {
+        onTimerElapsed(elapsedTaskIds[0]);
+      }
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [open, isRunning, timeLeft]);
+  }, [onTimerElapsed]);
 
   useEffect(() => {
-    if (!open || !isRunning || timeLeft > 0) return;
-    setIsRunning(false);
-    setIsCompletionPromptOpen(true);
-  }, [open, isRunning, timeLeft]);
+    const storage = getBrowserStorage();
+    if (!storage) return;
+
+    try {
+      storage.setItem(TIMER_STORAGE_KEY, JSON.stringify(timersByTaskId));
+    } catch (error) {
+      console.error('Failed to persist pomodoro timers', error);
+    }
+  }, [timersByTaskId]);
+
+  useEffect(() => {
+    if (!onActiveTimersChange) return;
+    const activeTimers = Object.entries(timersByTaskId).reduce<Record<string, number>>((acc, [taskId, timer]) => {
+      if (timer.isRunning && timer.timeLeft > 0) {
+        acc[taskId] = timer.timeLeft;
+      }
+      return acc;
+    }, {});
+    onActiveTimersChange(activeTimers);
+  }, [timersByTaskId, onActiveTimersChange]);
+
+  useEffect(() => {
+    if (!open) return;
+    setNoteInput('');
+  }, [open, task?.id]);
 
   if (!task) return null;
 
   const handleToggleTimer = () => {
-    if (!isRunning && !hasStarted) {
-      setHasStarted(true);
-      setIsRunning(true);
+    let isFirstStart = false;
+
+    setTimersByTaskId(prev => {
+      const existing = prev[task.id] || createDefaultTaskTimer(initialSeconds);
+
+      if (!existing.hasStarted) {
+        isFirstStart = true;
+        return {
+          ...prev,
+          [task.id]: {
+            ...existing,
+            hasStarted: true,
+            isRunning: true,
+            expectedEndTime: Date.now() + existing.timeLeft * 1000,
+            isCompletionPromptOpen: false,
+          },
+        };
+      }
+
+      if (existing.isRunning) {
+        const remaining = existing.expectedEndTime
+          ? Math.max(0, Math.floor((existing.expectedEndTime - Date.now()) / 1000))
+          : existing.timeLeft;
+
+        return {
+          ...prev,
+          [task.id]: {
+            ...existing,
+            timeLeft: remaining,
+            isRunning: false,
+            expectedEndTime: null,
+          },
+        };
+      }
+
+      return {
+        ...prev,
+        [task.id]: {
+          ...existing,
+          isRunning: true,
+          expectedEndTime: Date.now() + existing.timeLeft * 1000,
+        },
+      };
+    });
+
+    if (isFirstStart) {
       void onStart(task.id);
-      return;
     }
-    setIsRunning(prev => !prev);
   };
 
   const handleReset = () => {
-    setIsRunning(false);
-    setHasStarted(false);
-    setTimeLeft(initialSeconds);
+    setTimersByTaskId(prev => {
+      const existing = prev[task.id] || createDefaultTaskTimer(initialSeconds);
+      return {
+        ...prev,
+        [task.id]: {
+          ...existing,
+          initialSeconds,
+          timeLeft: initialSeconds,
+          isRunning: false,
+          hasStarted: false,
+          expectedEndTime: null,
+          isCompletionPromptOpen: false,
+        },
+      };
+    });
   };
 
   const handleAddNote = async () => {
@@ -126,9 +367,22 @@ export function TaskPomodoroOverlay({
 
   const handleCompletionChoice = async (completed: boolean) => {
     await onCompleteDecision(task.id, completed);
-    setIsCompletionPromptOpen(false);
-    setTimeLeft(initialSeconds);
-    setHasStarted(false);
+
+    setTimersByTaskId(prev => {
+      const existing = prev[task.id] || createDefaultTaskTimer(initialSeconds);
+      return {
+        ...prev,
+        [task.id]: {
+          ...existing,
+          timeLeft: existing.initialSeconds,
+          isRunning: false,
+          hasStarted: false,
+          expectedEndTime: null,
+          isCompletionPromptOpen: false,
+        },
+      };
+    });
+
     if (completed) {
       onClose();
     }
@@ -172,7 +426,7 @@ export function TaskPomodoroOverlay({
                 <div className="w-[min(72vw,540px)] aspect-square rounded-full border border-white/45 flex flex-col items-center justify-center bg-black/10 backdrop-blur-[1px]">
                   <p className="text-xs uppercase tracking-[0.3em] text-white/70">Focus</p>
                   <p className="text-[clamp(4rem,14vw,10rem)] leading-none font-light tabular-nums mt-2">
-                    {formatTime(timeLeft, showHours)}
+                    {formatTime(resolvedTimer.timeLeft, showHours)}
                   </p>
                   <p className="text-3xl mt-3 font-semibold text-white/95">Time to focus.</p>
                   <div className="mt-8 flex items-center gap-3">
@@ -180,7 +434,7 @@ export function TaskPomodoroOverlay({
                       className="rounded-full px-10 bg-white/12 border border-white/50 text-white hover:bg-white/20"
                       onClick={handleToggleTimer}
                     >
-                      {isRunning ? (
+                      {resolvedTimer.isRunning ? (
                         <>
                           <Pause className="h-4 w-4 mr-2" />
                           Pause
@@ -191,6 +445,12 @@ export function TaskPomodoroOverlay({
                           Start
                         </>
                       )}
+                    </Button>
+                    <Button
+                      className="rounded-full border border-emerald-300/60 bg-emerald-500/20 text-white hover:bg-emerald-500/30"
+                      onClick={() => void handleCompletionChoice(true)}
+                    >
+                      Task Completed
                     </Button>
                     <Button
                       variant="ghost"
@@ -235,7 +495,23 @@ export function TaskPomodoroOverlay({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isCompletionPromptOpen} onOpenChange={setIsCompletionPromptOpen}>
+      <Dialog
+        open={resolvedTimer.isCompletionPromptOpen}
+        onOpenChange={nextOpen => {
+          if (nextOpen) return;
+          setTimersByTaskId(prev => {
+            const existing = prev[task.id];
+            if (!existing || !existing.isCompletionPromptOpen) return prev;
+            return {
+              ...prev,
+              [task.id]: {
+                ...existing,
+                isCompletionPromptOpen: false,
+              },
+            };
+          });
+        }}
+      >
         <DialogContent className="bg-card border-border max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-foreground font-display">Did you complete this task?</DialogTitle>

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 interface KanbanColumnProps {
   column: Column;
   tasks: Task[];
+  activeTimersByTaskId: Record<string, number>;
   customFields: CustomFieldDefinition[];
   onAddTask: (status: TaskStatus) => void;
   onTaskClick: (task: Task) => void;
@@ -19,6 +20,7 @@ interface KanbanColumnProps {
 export function KanbanColumn({
   column,
   tasks,
+  activeTimersByTaskId,
   customFields,
   onAddTask,
   onTaskClick,
@@ -134,6 +136,7 @@ export function KanbanColumn({
             >
               <TaskCard
                 task={task}
+                activeTimerSeconds={activeTimersByTaskId[task.id]}
                 customFields={customFields}
                 onCardClick={onTaskClick}
                 onEdit={onEditTask}

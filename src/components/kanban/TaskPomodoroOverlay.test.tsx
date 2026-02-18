@@ -21,6 +21,12 @@ const task: Task = {
   updated_at: '2026-02-17T00:00:00.000Z',
 };
 
+const secondTask: Task = {
+  ...task,
+  id: 'task-2',
+  title: 'Review pull requests',
+};
+
 describe('TaskPomodoroOverlay', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -147,5 +153,232 @@ describe('TaskPomodoroOverlay', () => {
 
     expect(screen.getByText('2:00:00')).toBeInTheDocument();
     expect(screen.queryByText('02:00:00')).not.toBeInTheDocument();
+  });
+
+  it('continues running after task status changes on initial start', async () => {
+    const onStart = vi.fn();
+
+    const { rerender } = render(
+      <TaskPomodoroOverlay
+        open
+        task={task}
+        onClose={vi.fn()}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    });
+
+    rerender(
+      <TaskPomodoroOverlay
+        open
+        task={{ ...task, status: 'in_progress' }}
+        onClose={vi.fn()}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(onStart).toHaveBeenCalledWith(task.id);
+    expect(screen.getByText('00:59')).toBeInTheDocument();
+  });
+
+  it('keeps running while the timer window is closed and reopened', async () => {
+    const onStart = vi.fn();
+    const onClose = vi.fn();
+
+    const { rerender } = render(
+      <TaskPomodoroOverlay
+        open
+        task={task}
+        onClose={onClose}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    });
+
+    rerender(
+      <TaskPomodoroOverlay
+        open={false}
+        task={null}
+        onClose={onClose}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+
+    rerender(
+      <TaskPomodoroOverlay
+        open
+        task={task}
+        onClose={onClose}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('00:58')).toBeInTheDocument();
+  });
+
+  it('supports multiple task timers running at the same time', async () => {
+    const onStart = vi.fn();
+    const onClose = vi.fn();
+
+    const { rerender } = render(
+      <TaskPomodoroOverlay
+        open
+        task={task}
+        onClose={onClose}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    rerender(
+      <TaskPomodoroOverlay
+        open
+        task={secondTask}
+        onClose={onClose}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    });
+
+    rerender(
+      <TaskPomodoroOverlay
+        open={false}
+        task={null}
+        onClose={onClose}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+
+    rerender(
+      <TaskPomodoroOverlay
+        open
+        task={task}
+        onClose={onClose}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+    expect(screen.getByText('00:57')).toBeInTheDocument();
+
+    rerender(
+      <TaskPomodoroOverlay
+        open
+        task={secondTask}
+        onClose={onClose}
+        onStart={onStart}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+      />
+    );
+    expect(screen.getByText('00:58')).toBeInTheDocument();
+    expect(onStart).toHaveBeenCalledTimes(2);
+    expect(onStart).toHaveBeenNthCalledWith(1, task.id);
+    expect(onStart).toHaveBeenNthCalledWith(2, secondTask.id);
+  });
+
+  it('publishes active timers while running and clears them when paused', async () => {
+    const onActiveTimersChange = vi.fn();
+
+    render(
+      <TaskPomodoroOverlay
+        open
+        task={task}
+        onClose={vi.fn()}
+        onStart={vi.fn()}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={vi.fn()}
+        onActiveTimersChange={onActiveTimersChange}
+      />
+    );
+
+    onActiveTimersChange.mockClear();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(onActiveTimersChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        [task.id]: 59,
+      })
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    });
+
+    expect(onActiveTimersChange).toHaveBeenLastCalledWith({});
+  });
+
+  it('completes the task immediately from the timer UI', async () => {
+    const onCompleteDecision = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <TaskPomodoroOverlay
+        open
+        task={task}
+        onClose={onClose}
+        onStart={vi.fn()}
+        onAppendNote={vi.fn()}
+        onCompleteDecision={onCompleteDecision}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Task Completed' }));
+    });
+
+    expect(onCompleteDecision).toHaveBeenCalledWith(task.id, true);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

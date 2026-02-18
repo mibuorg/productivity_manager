@@ -31,6 +31,7 @@ export function KanbanBoard() {
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTimerTaskId, setActiveTimerTaskId] = useState<string | null>(null);
+  const [activeTimersByTaskId, setActiveTimersByTaskId] = useState<Record<string, number>>({});
 
   const handleAddTask = (status: TaskStatus) => {
     setEditingTask(null);
@@ -206,6 +207,7 @@ export function KanbanBoard() {
               key={column.id}
               column={column}
               tasks={tasksByColumn[column.id]}
+              activeTimersByTaskId={activeTimersByTaskId}
               customFields={customFields}
               onAddTask={handleAddTask}
               onTaskClick={handleTaskClick}
@@ -244,6 +246,8 @@ export function KanbanBoard() {
         onStart={handleTimerStart}
         onAppendNote={handleTimerAddNote}
         onCompleteDecision={handleTimerCompletionDecision}
+        onTimerElapsed={taskId => setActiveTimerTaskId(taskId)}
+        onActiveTimersChange={setActiveTimersByTaskId}
       />
 
       {/* AI Panel */}

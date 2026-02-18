@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Task, Board, CustomFieldDefinition, TaskStatus } from '@/types/kanban';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 const ESTIMATED_MINUTES_KEY = '__estimated_minutes';
@@ -29,28 +30,55 @@ const buildCustomFieldValues = (
 };
 
 export function useKanban() {
+  const { user } = useAuth();
   const [board, setBoard] = useState<Board | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const createDefaultBoard = useCallback(async () => {
+    if (!user) return null;
+    try {
+      const { data, error } = await supabase
+        .from('boards')
+        .insert({
+          name: 'Tasks to Complete',
+          owner_id: user.id,
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+      setBoard(data as Board);
+      return data as Board;
+    } catch (err) {
+      console.error('Error creating default board:', err);
+      return null;
+    }
+  }, [user]);
+
   const fetchBoard = useCallback(async () => {
+    if (!user) return null;
     try {
       const { data, error } = await supabase
         .from('boards')
         .select('*')
+        .eq('owner_id', user.id)
         .order('created_at', { ascending: true })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
-      setBoard(data);
-      return data;
+      if (data) {
+        setBoard(data as Board);
+        return data as Board;
+      }
+      return await createDefaultBoard();
     } catch (err) {
       console.error('Error fetching board:', err);
       return null;
     }
-  }, []);
+  }, [createDefaultBoard, user]);
 
   const fetchTasks = useCallback(async (boardId: string) => {
     try {
@@ -77,7 +105,6 @@ export function useKanban() {
         .order('position', { ascending: true });
 
       if (error) throw error;
-      // Cast and transform the data
       const fields = (data || []).map(f => ({
         ...f,
         options: Array.isArray(f.options) ? f.options as string[] : [],
@@ -90,6 +117,14 @@ export function useKanban() {
 
   useEffect(() => {
     const init = async () => {
+      if (!user) {
+        setBoard(null);
+        setTasks([]);
+        setCustomFields([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       const b = await fetchBoard();
       if (b) {
@@ -97,8 +132,8 @@ export function useKanban() {
       }
       setLoading(false);
     };
-    init();
-  }, [fetchBoard, fetchTasks, fetchCustomFields]);
+    void init();
+  }, [fetchBoard, fetchCustomFields, fetchTasks, user]);
 
   const createTask = useCallback(async (taskData: Partial<Task>) => {
     if (!board) return;
@@ -191,10 +226,9 @@ export function useKanban() {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     const targetTasks = tasks.filter(t => t.status === newStatus && t.id !== taskId);
-    
-    // Optimistic update
+
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, position: targetTasks.length } : t));
-    
+
     try {
       const { error } = await supabase
         .from('tasks')
@@ -202,7 +236,6 @@ export function useKanban() {
         .eq('id', taskId);
       if (error) throw error;
     } catch (err) {
-      // Revert on error
       setTasks(prev => prev.map(t => t.id === taskId ? task : t));
       toast.error('Failed to move task');
     }
@@ -248,7 +281,6 @@ export function useKanban() {
       });
     });
 
-    // Update positions in DB
     const updates = reorderedTasks.map(t =>
       supabase.from('tasks').update({ position: t.position, status: t.status }).eq('id', t.id)
     );

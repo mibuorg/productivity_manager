@@ -40,6 +40,9 @@ coverage
 supabase/.temp/
 supabase/.branches/
 supabase/.env
+.private-data/
+*.backup.json
+*.supabase-export.json
 
 # Local AI/dev tooling state
 .gemini/
