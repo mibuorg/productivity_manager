@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Settings2, Sparkles, Save, LayoutGrid, Loader2 } from 'lucide-react';
 import { useKanban } from '@/hooks/useKanban';
 import { KanbanColumn } from './KanbanColumn';
+import { CompletedCalendarView } from './CompletedCalendarView';
 import { TaskModal } from './TaskModal';
 import { CustomFieldsModal } from './CustomFieldsModal';
 import { AiChatPanel } from './AiChatPanel';
@@ -30,6 +31,7 @@ export function KanbanBoard() {
   const [customFieldsModalOpen, setCustomFieldsModalOpen] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [viewMode, setViewMode] = useState<'board' | 'completed_calendar'>('board');
   const [activeTimerTaskId, setActiveTimerTaskId] = useState<string | null>(null);
   const [activeTimersByTaskId, setActiveTimersByTaskId] = useState<Record<string, number>>({});
 
@@ -154,6 +156,25 @@ export function KanbanBoard() {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-md border border-border/70 p-0.5 bg-background">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setViewMode('board')}
+              className={`h-7 px-2.5 text-xs ${viewMode === 'board' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
+            >
+              Board
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setViewMode('completed_calendar')}
+              className={`h-7 px-2.5 text-xs ${viewMode === 'completed_calendar' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
+            >
+              Completed Calendar
+            </Button>
+          </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -201,23 +222,35 @@ export function KanbanBoard() {
 
       {/* Board */}
       <main className="flex-1 overflow-x-auto px-4 sm:px-6 py-4 sm:py-6">
-        <div className="flex gap-6 min-w-max pb-6">
-          {COLUMNS.map(column => (
-            <KanbanColumn
-              key={column.id}
-              column={column}
-              tasks={tasksByColumn[column.id]}
-              activeTimersByTaskId={activeTimersByTaskId}
-              customFields={customFields}
-              onAddTask={handleAddTask}
-              onTaskClick={handleTaskClick}
-              onEditTask={handleEditTask}
-              onDeleteTask={deleteTask}
-              onMoveTask={moveTask}
-              onDrop={handleDrop}
-            />
-          ))}
-        </div>
+        {viewMode === 'board' ? (
+          <div className="flex gap-6 min-w-max pb-6">
+            {COLUMNS.map(column => (
+              <KanbanColumn
+                key={column.id}
+                column={column}
+                tasks={tasksByColumn[column.id]}
+                activeTimersByTaskId={activeTimersByTaskId}
+                customFields={customFields}
+                onAddTask={handleAddTask}
+                onTaskClick={handleTaskClick}
+                onEditTask={handleEditTask}
+                onDeleteTask={deleteTask}
+                onMoveTask={moveTask}
+                onDrop={handleDrop}
+              />
+            ))}
+          </div>
+        ) : (
+          <CompletedCalendarView
+            tasks={tasks}
+            customFields={customFields}
+            activeTimersByTaskId={activeTimersByTaskId}
+            onTaskClick={handleTaskClick}
+            onEditTask={handleEditTask}
+            onDeleteTask={deleteTask}
+            onMoveTask={moveTask}
+          />
+        )}
       </main>
 
       {/* Modals */}
