@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Task, Column, CustomFieldDefinition, TaskStatus } from '@/types/kanban';
 import { TaskCard } from './TaskCard';
@@ -34,9 +34,35 @@ export function KanbanColumn({
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const dragCountRef = useRef(0);
 
+  const resetDragState = useCallback(() => {
+    dragCountRef.current = 0;
+    setIsDragOver(false);
+    setDraggingId(null);
+  }, []);
+
   useEffect(() => {
     setIsTouchDevice(window.matchMedia('(pointer: coarse)').matches);
   }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        resetDragState();
+      }
+    };
+
+    window.addEventListener('dragend', resetDragState);
+    window.addEventListener('drop', resetDragState);
+    window.addEventListener('blur', resetDragState);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('dragend', resetDragState);
+      window.removeEventListener('drop', resetDragState);
+      window.removeEventListener('blur', resetDragState);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [resetDragState]);
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('taskId', taskId);
@@ -45,7 +71,7 @@ export function KanbanColumn({
   };
 
   const handleDragEnd = () => {
-    setDraggingId(null);
+    resetDragState();
   };
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -66,9 +92,7 @@ export function KanbanColumn({
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    dragCountRef.current = 0;
-    setIsDragOver(false);
-    setDraggingId(null);
+    resetDragState();
     const taskId = e.dataTransfer.getData('taskId');
     if (taskId) onDrop(taskId, column.id);
   };
