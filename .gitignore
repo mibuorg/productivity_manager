@@ -50,3 +50,4 @@ supabase/backups/
 # Local AI/dev tooling state
 .gemini/
 .codex/
+.worktrees/
