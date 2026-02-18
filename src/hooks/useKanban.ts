@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Task, Board, CustomFieldDefinition, TaskStatus } from '@/types/kanban';
-import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 const ESTIMATED_MINUTES_KEY = '__estimated_minutes';
@@ -30,20 +29,17 @@ const buildCustomFieldValues = (
 };
 
 export function useKanban() {
-  const { user } = useAuth();
   const [board, setBoard] = useState<Board | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
   const [loading, setLoading] = useState(true);
 
   const createDefaultBoard = useCallback(async () => {
-    if (!user) return null;
     try {
       const { data, error } = await supabase
         .from('boards')
         .insert({
           name: 'Tasks to Complete',
-          owner_id: user.id,
         })
         .select('*')
         .single();
@@ -55,15 +51,13 @@ export function useKanban() {
       console.error('Error creating default board:', err);
       return null;
     }
-  }, [user]);
+  }, []);
 
   const fetchBoard = useCallback(async () => {
-    if (!user) return null;
     try {
       const { data, error } = await supabase
         .from('boards')
         .select('*')
-        .eq('owner_id', user.id)
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -78,7 +72,7 @@ export function useKanban() {
       console.error('Error fetching board:', err);
       return null;
     }
-  }, [createDefaultBoard, user]);
+  }, [createDefaultBoard]);
 
   const fetchTasks = useCallback(async (boardId: string) => {
     try {
@@ -117,14 +111,6 @@ export function useKanban() {
 
   useEffect(() => {
     const init = async () => {
-      if (!user) {
-        setBoard(null);
-        setTasks([]);
-        setCustomFields([]);
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
       const b = await fetchBoard();
       if (b) {
@@ -133,7 +119,7 @@ export function useKanban() {
       setLoading(false);
     };
     void init();
-  }, [fetchBoard, fetchCustomFields, fetchTasks, user]);
+  }, [fetchBoard, fetchCustomFields, fetchTasks]);
 
   const createTask = useCallback(async (taskData: Partial<Task>) => {
     if (!board) return;

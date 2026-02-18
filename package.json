@@ -11,8 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "data:backup-public": "node tools/export_public_data.mjs",
-    "data:import-user": "node tools/import_user_data.mjs"
+    "data:backup-local": "node tools/export_public_data.mjs",
+    "data:backup-public": "node tools/export_public_data.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -41,8 +41,11 @@ supabase/.temp/
 supabase/.branches/
 supabase/.env
 .private-data/
+local-data/
+supabase/backups/
 *.backup.json
 *.supabase-export.json
+*.local-user-data.json
 
 # Local AI/dev tooling state
 .gemini/

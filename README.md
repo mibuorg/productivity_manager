@@ -22,10 +22,8 @@ A Supabase-backed productivity app that combines a Kanban board with task-level 
     - `Completed` moves task to `Completed`
     - `Not yet` keeps task in `In Progress`
 - Sidebar focus timer widget
-- Account authentication:
-  - Top-right `Account` menu
-  - `Log in / Sign up` and `Log out` actions
-  - Per-user board isolation via Supabase auth + RLS
+- No user authentication in this local branch
+- Data is stored in your local/self-hosted Supabase instance (server-side local database)
 - Optional AI assistant panel for task suggestions and board analysis
 
 ## Tech Stack
@@ -33,7 +31,7 @@ A Supabase-backed productivity app that combines a Kanban board with task-level 
 - React + TypeScript + Vite
 - Tailwind CSS + shadcn/ui (Radix primitives)
 - `@dnd-kit` for drag-and-drop
-- Supabase (database/auth/client)
+- Supabase (database/client)
 - Vitest + Testing Library
 
 ## Getting Started
@@ -54,6 +52,8 @@ VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
 ```
 
+For a local server setup, point these values to your local Supabase stack (`supabase start`).
+
 ### 3. Run the app
 
 ```bash
@@ -71,7 +71,6 @@ Useful SQL files in this repo:
 - `src/integrations/supabase/schema.sql` (baseline schema)
 - `src/integrations/supabase/migrations/01_fix_tasks_columns.sql` (repair migration for missing task columns)
 - `supabase/migrations/20260217200147_d736fe70-38e7-4588-8afc-f8087d758c58.sql` (project migration)
-- `supabase/migrations/20260218173500_auth_per_user_rls.sql` (owner-based auth + RLS migration)
 
 Edge function config is in:
 
@@ -88,30 +87,18 @@ If you use the AI panel, configure the required edge function secret(s) in Supab
 - `npm run lint` - run ESLint
 - `npm run test` - run test suite once
 - `npm run test:watch` - run tests in watch mode
-- `npm run data:backup-public` - export currently public board data to `.private-data/`
-- `npm run data:import-user` - import a backup file into a signed-in user's board
+- `npm run data:backup-local` - export current board data to `.private-data/`
+- `npm run data:backup-public` - alias of `data:backup-local`
 
-## Migrating Existing Public Data to a User Account
+## Local Data Backup
 
-1. Back up current public board data before applying auth RLS:
-
-```bash
-npm run data:backup-public
-```
-
-2. Apply Supabase migrations including:
-
-- `supabase/migrations/20260218173500_auth_per_user_rls.sql`
-
-3. Sign up/log in with your target account in the app.
-
-4. Import the saved backup into that account:
+Back up current board data to a gitignored file:
 
 ```bash
-npm run data:import-user -- --file .private-data/<your-backup-file>.json --email you@example.com --password 'your-password'
+npm run data:backup-local
 ```
 
-Backup files are ignored by git via `.gitignore` (`.private-data/` and backup JSON patterns).
+Local user-data paths are ignored by git via `.gitignore` (`.private-data/`, `local-data/`, `supabase/backups/`, and backup JSON patterns).
 
 ## Project Structure
 
