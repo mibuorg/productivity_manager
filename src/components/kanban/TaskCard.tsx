@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, User, MoreHorizontal, Trash2, Edit3, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, User, MoreHorizontal, Trash2, Edit3, ArrowRight, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { Task, PRIORITY_CONFIG, TaskStatus, CustomFieldDefinition, COLUMNS } from '@/types/kanban';
 import { Button } from '@/components/ui/button';
 import {
@@ -65,6 +65,25 @@ const parseDueDateParts = (dateStr: string | null) => {
   };
 };
 
+const formatScheduledTime = (value: string | null | undefined): string | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  const timeMatch = normalized.match(/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/);
+  if (timeMatch) {
+    const hours = Number.parseInt(timeMatch[1], 10);
+    const mins = timeMatch[2];
+    const suffix = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = ((hours + 11) % 12) + 1;
+    return `${displayHours}:${mins} ${suffix}`;
+  }
+
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+};
+
 export function TaskCard({
   task,
   customFields,
@@ -77,6 +96,7 @@ export function TaskCard({
 }: TaskCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const priority = PRIORITY_CONFIG[task.priority];
+  const scheduledTimeLabel = formatScheduledTime(task.scheduled_time);
   const hasEstimatedMinutes = typeof task.estimated_minutes === 'number' && task.estimated_minutes > 0;
   const hasActiveTimer = typeof activeTimerSeconds === 'number' && activeTimerSeconds > 0;
   const otherColumns = COLUMNS.filter(c => c.id !== task.status);
@@ -135,6 +155,12 @@ export function TaskCard({
           {hasActiveTimer && (
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide bg-primary/20 text-primary border border-primary/30">
               {formatActiveTimer(activeTimerSeconds)} left
+            </span>
+          )}
+          {scheduledTimeLabel && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide bg-accent text-accent-foreground border border-border/70">
+              <Clock className="h-3 w-3" />
+              {scheduledTimeLabel}
             </span>
           )}
           {hasEstimatedMinutes && (

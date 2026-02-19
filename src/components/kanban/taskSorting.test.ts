@@ -60,4 +60,45 @@ describe('task sorting', () => {
       'low-newest',
     ]);
   });
+
+  it('sorts timed tasks by time descending, then priority descending', () => {
+    const noTimeUrgent: Task = {
+      ...baseTask,
+      id: 'no-time-urgent',
+      priority: 'urgent',
+      created_at: '2026-02-18T14:00:00.000Z',
+    };
+    const laterTimeLow: Task = {
+      ...baseTask,
+      id: 'later-time-low',
+      priority: 'low',
+      scheduled_time: '17:00',
+    };
+    const earlierTimeUrgent: Task = {
+      ...baseTask,
+      id: 'earlier-time-urgent',
+      priority: 'urgent',
+      scheduled_time: '15:30',
+    };
+    const sameTimeHigh: Task = {
+      ...baseTask,
+      id: 'same-time-high',
+      priority: 'high',
+      scheduled_time: '15:30',
+    };
+
+    const result = sortTasksByPriorityAndCreatedAtDesc([
+      noTimeUrgent,
+      sameTimeHigh,
+      laterTimeLow,
+      earlierTimeUrgent,
+    ]);
+
+    expect(result.map(task => task.id)).toEqual([
+      'later-time-low',
+      'earlier-time-urgent',
+      'same-time-high',
+      'no-time-urgent',
+    ]);
+  });
 });

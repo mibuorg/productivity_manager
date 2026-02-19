@@ -40,6 +40,20 @@ describe('TaskCard', () => {
     expect(screen.getByText('45 min')).toBeInTheDocument();
   });
 
+  it('shows the scheduled time as a visible card tag', () => {
+    render(
+      <TaskCard
+        task={{ ...baseTask, scheduled_time: '16:45' }}
+        customFields={[]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onMove={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('4:45 PM')).toBeInTheDocument();
+  });
+
   it('adds created-at metadata attributes on the card element', () => {
     const { container } = render(
       <TaskCard

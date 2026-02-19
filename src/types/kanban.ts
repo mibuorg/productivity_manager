@@ -20,6 +20,7 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   due_date: string | null;
+  scheduled_time?: string | null;
   estimated_minutes?: number | null;
   tags: string[];
   assignee: string;

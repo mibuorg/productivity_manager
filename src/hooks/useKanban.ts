@@ -61,6 +61,16 @@ const toValidDateString = (value: unknown): string | null => {
   return Number.isNaN(parsed) ? null : value;
 };
 
+const toValidTimeString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  const match = normalized.match(/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/);
+  if (!match) return null;
+  return `${match[1]}:${match[2]}`;
+};
+
 const withEstimatedMinutes = (task: Task): Task => {
   const normalizedUpdatedAt = toValidDateString(task.updated_at) ?? new Date().toISOString();
   const normalizedCreatedAt = toValidDateString(task.created_at) ?? normalizedUpdatedAt;
@@ -71,6 +81,7 @@ const withEstimatedMinutes = (task: Task): Task => {
     updated_at: normalizedUpdatedAt,
     tags: normalizeTags(task.tags),
     custom_field_values: task.custom_field_values || {},
+    scheduled_time: toValidTimeString(task.scheduled_time),
     estimated_minutes: getEstimatedMinutes(task.custom_field_values),
   };
 };
@@ -236,6 +247,7 @@ export function useKanban() {
         status,
         priority: taskData.priority || 'medium',
         due_date: taskData.due_date || null,
+        scheduled_time: toValidTimeString(taskData.scheduled_time),
         estimated_minutes: estimatedMinutes,
         tags: normalizeTags(taskData.tags),
         assignee: taskData.assignee || '',

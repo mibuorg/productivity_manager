@@ -22,7 +22,7 @@ const existingTask: Task = {
 };
 
 describe('TaskModal', () => {
-  it('saves estimated time in minutes when creating a task', () => {
+  it('saves assigned time and duration when creating a task', () => {
     const onSave = vi.fn();
     const onClose = vi.fn();
 
@@ -40,7 +40,10 @@ describe('TaskModal', () => {
     fireEvent.change(screen.getByPlaceholderText('What needs to be done?'), {
       target: { value: 'Write docs' },
     });
-    fireEvent.change(screen.getByLabelText('Time (minutes)'), {
+    fireEvent.change(screen.getByLabelText('Time'), {
+      target: { value: '16:45' },
+    });
+    fireEvent.change(screen.getByLabelText('Duration (minutes)'), {
       target: { value: '45' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create Task' }));
@@ -48,12 +51,63 @@ describe('TaskModal', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
+        scheduled_time: '16:45',
         estimated_minutes: 45,
       })
     );
   });
 
-  it('prefills and clears estimated time when editing a task', () => {
+  it('does not render quick preset time chips', () => {
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <TaskModal
+        open
+        onClose={onClose}
+        onSave={onSave}
+        task={null}
+        defaultStatus="todo"
+        customFields={[]}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: '9:00 AM' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '1:00 PM' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '6:00 PM' })).not.toBeInTheDocument();
+  });
+
+  it('accepts typed time input without segmented hour/minute/am-pm controls', () => {
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <TaskModal
+        open
+        onClose={onClose}
+        onSave={onSave}
+        task={null}
+        defaultStatus="todo"
+        customFields={[]}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('What needs to be done?'), {
+      target: { value: 'Typed time task' },
+    });
+    fireEvent.change(screen.getByLabelText('Time'), {
+      target: { value: '9:30 pm' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Task' }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scheduled_time: '21:30',
+      })
+    );
+  });
+
+  it('prefills and clears duration when editing a task', () => {
     const onSave = vi.fn();
     const onClose = vi.fn();
 
@@ -68,10 +122,11 @@ describe('TaskModal', () => {
       />
     );
 
-    const timeInput = screen.getByLabelText('Time (minutes)');
-    expect(timeInput).toHaveValue(30);
+    const durationInput = screen.getByLabelText('Duration (minutes)');
+    expect(durationInput).toHaveValue(30);
+    expect(screen.getByLabelText('Time')).toHaveValue('');
 
-    fireEvent.change(timeInput, { target: { value: '' } });
+    fireEvent.change(durationInput, { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
     expect(onSave).toHaveBeenCalledTimes(1);
@@ -80,6 +135,24 @@ describe('TaskModal', () => {
         estimated_minutes: null,
       })
     );
+  });
+
+  it('does not render assignee input in the modal', () => {
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <TaskModal
+        open
+        onClose={onClose}
+        onSave={onSave}
+        task={{ ...existingTask, assignee: 'Alex' }}
+        defaultStatus="todo"
+        customFields={[]}
+      />
+    );
+
+    expect(screen.queryByPlaceholderText('Name or email')).not.toBeInTheDocument();
   });
 
   it('clears the tag input when switching from editing to a new task', () => {

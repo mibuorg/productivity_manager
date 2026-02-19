@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Tag, User, Plus, Clock } from 'lucide-react';
+import { X, Calendar, Tag, Plus, Clock } from 'lucide-react';
 import { Task, TaskStatus, TaskPriority, CustomFieldDefinition, PRIORITY_CONFIG, COLUMNS } from '@/types/kanban';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,44 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+const TIME_PICKER_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
+  const hours = Math.floor(index / 4);
+  const minutes = (index % 4) * 15;
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+});
+
+const normalizeTimeInput = (value: string): string | null => {
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  const match = normalized.match(/^(\d{1,2})(?::([0-5]\d))?\s*([ap]m?)?$/i);
+  if (!match) return null;
+
+  const rawHours = Number.parseInt(match[1], 10);
+  const minutes = match[2] || '00';
+  const meridiem = match[3]?.toLowerCase();
+
+  if (meridiem) {
+    if (rawHours < 1 || rawHours > 12) return null;
+    const hours24 = (rawHours % 12) + (meridiem.startsWith('p') ? 12 : 0);
+    return `${hours24.toString().padStart(2, '0')}:${minutes}`;
+  }
+
+  if (rawHours < 0 || rawHours > 23) return null;
+  return `${rawHours.toString().padStart(2, '0')}:${minutes}`;
+};
+
+const formatTimeLabel = (value: string): string | null => {
+  const normalized = normalizeTimeInput(value);
+  if (!normalized) return null;
+
+  const [hourPart, minutePart] = normalized.split(':');
+  const hours = Number.parseInt(hourPart, 10);
+  const suffix = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = ((hours + 11) % 12) + 1;
+  return `${displayHours}:${minutePart} ${suffix}`;
+};
+
 interface TaskModalProps {
   open: boolean;
   onClose: () => void;
@@ -34,11 +72,13 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [dueDate, setDueDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState('');
   const [assignee, setAssignee] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, string | number>>({});
+  const selectedTimeLabel = formatTimeLabel(scheduledTime);
 
   useEffect(() => {
     if (task) {
@@ -47,6 +87,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
       setStatus(task.status);
       setPriority(task.priority);
       setDueDate(task.due_date || '');
+      setScheduledTime(task.scheduled_time || '');
       setEstimatedMinutes(task.estimated_minutes ? String(task.estimated_minutes) : '');
       setAssignee(task.assignee || '');
       setTagInput('');
@@ -58,6 +99,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
       setStatus(defaultStatus);
       setPriority('medium');
       setDueDate('');
+      setScheduledTime('');
       setEstimatedMinutes('');
       setAssignee('');
       setTagInput('');
@@ -77,6 +119,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
   const handleSave = () => {
     if (!title.trim()) return;
 
+    const normalizedScheduledTime = normalizeTimeInput(scheduledTime);
     const parsedEstimatedMinutes = Number.parseInt(estimatedMinutes, 10);
     const normalizedEstimatedMinutes =
       Number.isFinite(parsedEstimatedMinutes) && parsedEstimatedMinutes > 0
@@ -94,6 +137,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
       status,
       priority,
       due_date: dueDate || null,
+      scheduled_time: normalizedScheduledTime,
       estimated_minutes: normalizedEstimatedMinutes,
       assignee,
       tags: normalizedTags,
@@ -177,7 +221,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
             </div>
           </div>
 
-          {/* Due Date + Time + Assignee */}
+          {/* Due Date + Time + Duration */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 uppercase tracking-wide">
@@ -187,12 +231,44 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
                 type="date"
                 value={dueDate}
                 onChange={e => setDueDate(e.target.value)}
+                aria-label="Due Date"
                 className="bg-muted border-border text-foreground [color-scheme:dark]"
               />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 uppercase tracking-wide">
                 <Clock className="h-3 w-3" /> Time
+              </label>
+              <div className="relative">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder="e.g. 9:30 AM"
+                  list="task-time-options"
+                  value={scheduledTime}
+                  onChange={e => setScheduledTime(e.target.value)}
+                  onBlur={() => {
+                    const normalized = normalizeTimeInput(scheduledTime);
+                    if (normalized) setScheduledTime(normalized);
+                  }}
+                  aria-label="Time"
+                  className="pl-8 bg-muted border-border text-foreground"
+                />
+              </div>
+              <datalist id="task-time-options">
+                {TIME_PICKER_OPTIONS.map(option => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
+              {selectedTimeLabel && (
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Selected: {selectedTimeLabel}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 uppercase tracking-wide">
+                <Clock className="h-3 w-3" /> Duration
               </label>
               <Input
                 type="number"
@@ -201,18 +277,7 @@ export function TaskModal({ open, onClose, onSave, task, defaultStatus = 'todo',
                 value={estimatedMinutes}
                 onChange={e => setEstimatedMinutes(e.target.value)}
                 placeholder="Minutes"
-                aria-label="Time (minutes)"
-                className="bg-muted border-border text-foreground"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 uppercase tracking-wide">
-                <User className="h-3 w-3" /> Assignee
-              </label>
-              <Input
-                value={assignee}
-                onChange={e => setAssignee(e.target.value)}
-                placeholder="Name or email"
+                aria-label="Duration (minutes)"
                 className="bg-muted border-border text-foreground"
               />
             </div>
