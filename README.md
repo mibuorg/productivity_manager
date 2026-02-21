@@ -10,6 +10,9 @@ Single-user, local-first productivity app with a Kanban board and task-level foc
 - Assignee data remains in the task model for compatibility, but is currently hidden from the create/edit UI
 - Time selection supports direct typing (`9:30 pm`, `21:30`) with 15-minute suggestions for calendar-style scheduling
 - Column task ordering: timed tasks first by time desc, then priority desc (`Urgent > High > Medium > Low`), then created time desc for ties
+- Board toolbar includes live search (`title`, `description`, `tags`) plus an `Organize` menu
+- `Organize` menu supports sort-by (`smart`, `time`, `duration`, `priority`, `due date`, `title`, `tag`) and group-by (`time`, `duration`, `priority`, `tag`) within each column
+- Tag filters are multi-select and can be combined with search and sort/group controls
 - Scheduled task time is shown directly on task cards as a visible badge
 - Timer-enabled tasks open a floating Pomodoro overlay
 - One-click timer start:

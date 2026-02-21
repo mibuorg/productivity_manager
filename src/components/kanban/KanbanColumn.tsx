@@ -3,10 +3,12 @@ import { Plus } from 'lucide-react';
 import { Task, Column, CustomFieldDefinition, TaskStatus } from '@/types/kanban';
 import { TaskCard } from './TaskCard';
 import { Button } from '@/components/ui/button';
+import { TaskGroup } from './taskOrganization';
 
 interface KanbanColumnProps {
   column: Column;
   tasks: Task[];
+  taskGroups?: TaskGroup[];
   activeTimersByTaskId: Record<string, number>;
   customFields: CustomFieldDefinition[];
   onAddTask: (status: TaskStatus) => void;
@@ -20,6 +22,7 @@ interface KanbanColumnProps {
 export function KanbanColumn({
   column,
   tasks,
+  taskGroups,
   activeTimersByTaskId,
   customFields,
   onAddTask,
@@ -97,6 +100,9 @@ export function KanbanColumn({
     if (taskId) onDrop(taskId, column.id);
   };
 
+  const groupedTasks = taskGroups || [];
+  const showGroupHeadings = groupedTasks.length > 0;
+
   return (
     <div className="flex flex-col min-w-[85vw] sm:min-w-[300px] max-w-[92vw] sm:max-w-[340px] flex-1">
       {/* Column Header */}
@@ -151,25 +157,58 @@ export function KanbanColumn({
         }}
       >
         <div className="flex flex-col gap-3">
-          {tasks.map(task => (
-            <div
-              key={task.id}
-              draggable={!isTouchDevice}
-              onDragStart={e => handleDragStart(e, task.id)}
-              onDragEnd={handleDragEnd}
-            >
-              <TaskCard
-                task={task}
-                activeTimerSeconds={activeTimersByTaskId[task.id]}
-                customFields={customFields}
-                onCardClick={onTaskClick}
-                onEdit={onEditTask}
-                onDelete={onDeleteTask}
-                onMove={onMoveTask}
-                isDragging={draggingId === task.id}
-              />
-            </div>
-          ))}
+          {showGroupHeadings ? (
+            groupedTasks.map(group => (
+              <div key={group.id} className="flex flex-col gap-2">
+                <div className="px-1">
+                  <p className="text-[11px] font-semibold tracking-wide uppercase text-muted-foreground/90">
+                    {group.label}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {group.tasks.map(task => (
+                    <div
+                      key={`${group.id}-${task.id}`}
+                      draggable={!isTouchDevice}
+                      onDragStart={e => handleDragStart(e, task.id)}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <TaskCard
+                        task={task}
+                        activeTimerSeconds={activeTimersByTaskId[task.id]}
+                        customFields={customFields}
+                        onCardClick={onTaskClick}
+                        onEdit={onEditTask}
+                        onDelete={onDeleteTask}
+                        onMove={onMoveTask}
+                        isDragging={draggingId === task.id}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            tasks.map(task => (
+              <div
+                key={task.id}
+                draggable={!isTouchDevice}
+                onDragStart={e => handleDragStart(e, task.id)}
+                onDragEnd={handleDragEnd}
+              >
+                <TaskCard
+                  task={task}
+                  activeTimerSeconds={activeTimersByTaskId[task.id]}
+                  customFields={customFields}
+                  onCardClick={onTaskClick}
+                  onEdit={onEditTask}
+                  onDelete={onDeleteTask}
+                  onMove={onMoveTask}
+                  isDragging={draggingId === task.id}
+                />
+              </div>
+            ))
+          )}
 
           {/* Empty state */}
           {tasks.length === 0 && !isDragOver && (

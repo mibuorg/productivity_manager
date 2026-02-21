@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Sparkles, LayoutGrid, Loader2 } from 'lucide-react';
+import { Plus, Sparkles, LayoutGrid, Loader2, Search, SlidersHorizontal } from 'lucide-react';
 import { useKanban } from '@/hooks/useKanban';
 import { KanbanColumn } from './KanbanColumn';
 import { CompletedCalendarView } from './CompletedCalendarView';
@@ -7,9 +7,31 @@ import { TaskModal } from './TaskModal';
 import { AiChatPanel } from './AiChatPanel';
 import { TaskPomodoroOverlay } from './TaskPomodoroOverlay';
 import { getCompletedTasksForDay, toDayKey } from './completedCalendar';
-import { sortTasksByPriorityAndCreatedAtDesc } from './taskSorting';
 import { Task, TaskStatus, COLUMNS } from '@/types/kanban';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  TASK_GROUP_OPTIONS,
+  TASK_SORT_OPTIONS,
+  TaskGroup,
+  TaskGroupBy,
+  TaskSortBy,
+  filterTasks,
+  getDistinctTags,
+  groupTasks,
+  sortTasks,
+} from './taskOrganization';
 
 export function KanbanBoard() {
   const {
@@ -30,6 +52,10 @@ export function KanbanBoard() {
   const [activeTimerTaskId, setActiveTimerTaskId] = useState<string | null>(null);
   const [activeTimersByTaskId, setActiveTimersByTaskId] = useState<Record<string, number>>({});
   const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<TaskSortBy>('default');
+  const [groupBy, setGroupBy] = useState<TaskGroupBy>('none');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -76,11 +102,57 @@ export function KanbanBoard() {
   };
 
   const todayDayKey = useMemo(() => toDayKey(new Date(currentTimestamp)), [currentTimestamp]);
-  const todoTasks = sortTasksByPriorityAndCreatedAtDesc(tasks.filter(t => t.status === 'todo'));
-  const inProgressTasks = sortTasksByPriorityAndCreatedAtDesc(tasks.filter(t => t.status === 'in_progress'));
-  const completedTasks = getCompletedTasksForDay(tasks, todayDayKey);
-  const tasksByColumn = { todo: todoTasks, in_progress: inProgressTasks, completed: completedTasks };
+  const completedTasks = useMemo(() => getCompletedTasksForDay(tasks, todayDayKey), [tasks, todayDayKey]);
+
+  const baseTasksByColumn = useMemo<Record<TaskStatus, Task[]>>(() => ({
+    todo: tasks.filter(task => task.status === 'todo'),
+    in_progress: tasks.filter(task => task.status === 'in_progress'),
+    completed: completedTasks,
+  }), [completedTasks, tasks]);
+
+  const availableTags = useMemo(
+    () => getDistinctTags(Object.values(baseTasksByColumn).flat()),
+    [baseTasksByColumn],
+  );
+
+  useEffect(() => {
+    setSelectedTags(previous =>
+      previous.filter(tag => availableTags.some(availableTag => availableTag === tag)),
+    );
+  }, [availableTags]);
+
+  const organizedByColumn = useMemo<Record<TaskStatus, { tasks: Task[]; taskGroups?: TaskGroup[] }>>(() => {
+    const organizeColumn = (columnTasks: Task[]) => {
+      const filteredTasks = filterTasks(columnTasks, { query: searchQuery, selectedTags });
+      const sortedTasks = sortTasks(filteredTasks, sortBy);
+
+      if (groupBy === 'none') {
+        return { tasks: sortedTasks };
+      }
+
+      return {
+        tasks: sortedTasks,
+        taskGroups: groupTasks(filteredTasks, groupBy, sortBy),
+      };
+    };
+
+    return {
+      todo: organizeColumn(baseTasksByColumn.todo),
+      in_progress: organizeColumn(baseTasksByColumn.in_progress),
+      completed: organizeColumn(baseTasksByColumn.completed),
+    };
+  }, [baseTasksByColumn, groupBy, searchQuery, selectedTags, sortBy]);
+
   const activeTimerTask = activeTimerTaskId ? tasks.find(t => t.id === activeTimerTaskId) || null : null;
+
+  const toggleTagFilter = (tag: string, checked: boolean) => {
+    setSelectedTags(previous => {
+      if (checked) {
+        return previous.includes(tag) ? previous : [...previous, tag];
+      }
+      return previous.filter(existingTag => existingTag !== tag);
+    });
+  };
 
   const appendNoteBullet = (description: string | null | undefined, note: string) => {
     const trimmedNote = note.trim();
@@ -140,7 +212,7 @@ export function KanbanBoard() {
       className={`flex h-full min-h-0 flex-col transition-all duration-300 ${aiPanelOpen ? 'mr-[380px]' : ''}`}
     >
       {/* Header */}
-      <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border/50 shrink-0">
+      <header className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b border-border/50 shrink-0 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
             <LayoutGrid className="h-5 w-5 text-primary" />
@@ -155,7 +227,83 @@ export function KanbanBoard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          {viewMode === 'board' && (
+            <>
+              <div className="relative w-[180px] sm:w-[240px]">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={event => setSearchQuery(event.target.value)}
+                  placeholder="Search tasks..."
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-2 border-border/70 bg-background text-xs"
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    Organize
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={sortBy} onValueChange={value => setSortBy(value as TaskSortBy)}>
+                    {TASK_SORT_OPTIONS.map(option => (
+                      <DropdownMenuRadioItem key={option.value} value={option.value}>
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuLabel>Group by</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={groupBy} onValueChange={value => setGroupBy(value as TaskGroupBy)}>
+                    {TASK_GROUP_OPTIONS.map(option => (
+                      <DropdownMenuRadioItem key={option.value} value={option.value}>
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuLabel>Tag filter</DropdownMenuLabel>
+                  {availableTags.length > 0 ? (
+                    availableTags.map(tag => (
+                      <DropdownMenuCheckboxItem
+                        key={tag}
+                        checked={selectedTags.includes(tag)}
+                        onCheckedChange={checked => toggleTagFilter(tag, checked === true)}
+                        onSelect={event => event.preventDefault()}
+                      >
+                        {tag}
+                      </DropdownMenuCheckboxItem>
+                    ))
+                  ) : (
+                    <DropdownMenuItem disabled>No tags available</DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={selectedTags.length === 0}
+                    onSelect={event => {
+                      event.preventDefault();
+                      setSelectedTags([]);
+                    }}
+                  >
+                    Clear tag filters
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
+
           <div className="inline-flex rounded-md border border-border/70 p-0.5 bg-background">
             <Button
               variant="ghost"
@@ -207,7 +355,8 @@ export function KanbanBoard() {
               <KanbanColumn
                 key={column.id}
                 column={column}
-                tasks={tasksByColumn[column.id]}
+                tasks={organizedByColumn[column.id].tasks}
+                taskGroups={organizedByColumn[column.id].taskGroups}
                 activeTimersByTaskId={activeTimersByTaskId}
                 customFields={[]}
                 onAddTask={handleAddTask}

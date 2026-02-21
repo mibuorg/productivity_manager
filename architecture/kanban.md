@@ -21,13 +21,19 @@ Provide a local-first Kanban board with stable ordering, drag-and-drop transitio
   1. Timed tasks first, sorted by `scheduled_time` descending
   2. Priority descending for equal/no times: `urgent > high > medium > low`
   3. `created_at` descending for ties
+- A board-level `Organize` menu applies view-level transforms within each status column:
+  - Sort by: `smart`, `time`, `duration`, `priority`, `due_date`, `title`, `tag`
+  - Group by: `none`, `time`, `duration`, `priority`, `tag`
+  - Tag filter: multi-select, tasks match if any selected tag is present
+  - Live search across `title`, `description`, and `tags`
+- Grouping by tag intentionally duplicates tasks into each matching tag group for visibility.
 - `position` values are reindexed from that same ordering after create/update/move/delete/reorder so persisted metadata matches rendered order.
 - Completed Calendar grouping uses stable completion day metadata (`__completed_at`) for day buckets, with fallback to legacy `updated_at`.
 - Within a day, completed cards are ordered by completion timestamp; board-column display still follows priority/time ordering.
 
 ## Interaction Flow
 1. `KanbanBoard` loads tasks from `useKanban`.
-2. Tasks are filtered by status and sorted by the shared comparator.
+2. Board view applies search/tag filters, then sort/group transforms per column via `taskOrganization.ts`.
 3. Drag/drop updates task status through `moveTask`.
 4. `useKanban` persists updated state and reapplies normalized, reindexed data.
 
