@@ -103,6 +103,10 @@ export function KanbanBoard() {
 
   const todayDayKey = useMemo(() => toDayKey(new Date(currentTimestamp)), [currentTimestamp]);
   const completedTasks = useMemo(() => getCompletedTasksForDay(tasks, todayDayKey), [tasks, todayDayKey]);
+  const todoTaskCount = useMemo(
+    () => tasks.filter(task => task.status === 'todo').length,
+    [tasks],
+  );
 
   const baseTasksByColumn = useMemo<Record<TaskStatus, Task[]>>(() => ({
     todo: tasks.filter(task => task.status === 'todo'),
@@ -222,7 +226,7 @@ export function KanbanBoard() {
               Tasks to Complete
             </h1>
             <p className="text-xs text-muted-foreground">
-              {tasks.length} task{tasks.length !== 1 ? 's' : ''} · {completedTasks.length} completed
+              {todoTaskCount} task{todoTaskCount !== 1 ? 's' : ''} · {completedTasks.length} completed
             </p>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CompletedCalendarView } from './CompletedCalendarView';
 import { Task } from '@/types/kanban';
@@ -84,5 +84,31 @@ describe('CompletedCalendarView', () => {
     expect(within(todayColumn).getByText('Completed today')).toBeInTheDocument();
     expect(within(yesterdayColumn).getByText('Completed yesterday')).toBeInTheDocument();
     expect(screen.queryByText('Todo task should be hidden')).not.toBeInTheDocument();
+  });
+
+  it('supports paging to older and future weeks', () => {
+    render(
+      <CompletedCalendarView
+        tasks={[]}
+        customFields={[]}
+        activeTimersByTaskId={{}}
+        onTaskClick={vi.fn()}
+        onEditTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onMoveTask={vi.fn()}
+        now={new Date(2026, 1, 18, 12, 0, 0)}
+      />
+    );
+
+    expect(screen.getByTestId('completed-calendar-day-2026-02-18')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous Week' }));
+    expect(screen.getByTestId('completed-calendar-day-2026-02-11')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Week' }));
+    expect(screen.getByTestId('completed-calendar-day-2026-02-18')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next Week' }));
+    expect(screen.getByTestId('completed-calendar-day-2026-02-25')).toBeInTheDocument();
   });
 });

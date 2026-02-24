@@ -45,5 +45,6 @@ Provide a local-first Kanban board with stable ordering, drag-and-drop transitio
 ## Notes
 - Completed column in board view only shows tasks completed on the current day.
 - Historical completed tasks remain visible in Completed Calendar view.
+- Completed Calendar renders a 7-day window with week-by-week `Previous` / `Next` navigation (including future week windows).
 - Task cards expose creation metadata in DOM attributes (`data-task-created-at`, `data-task-created-at-ts`) to support future chronological UI logic.
 - Task cards show `scheduled_time` as a visible time badge when set.

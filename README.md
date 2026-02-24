@@ -26,6 +26,7 @@ Single-user, local-first productivity app with a Kanban board and task-level foc
 - `Task Completed` action inside timer UI
 - Completion prompt at timer end to move task to `Completed` or keep `In Progress`
 - Completed Calendar view
+- Completed Calendar supports week-by-week navigation to past and future week windows
 - Completed-day history uses stable completion metadata so editing a completed task does not move it to a new day
 - Task cards expose creation metadata attributes (`data-task-created-at`, `data-task-created-at-ts`) for chronological features
 - AI panel is enabled only when the server has internet access (`/api/internet-status`)

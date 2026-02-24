@@ -1,7 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Task, CustomFieldDefinition, TaskStatus } from '@/types/kanban';
 import { TaskCard } from './TaskCard';
 import { buildDayKeys, groupCompletedTasksByDay } from './completedCalendar';
+import { Button } from '@/components/ui/button';
 
 interface CompletedCalendarViewProps {
   tasks: Task[];
@@ -35,54 +37,95 @@ export function CompletedCalendarView({
   now,
 }: CompletedCalendarViewProps) {
   const nowTimestamp = now ? now.getTime() : Date.now();
+  const [weekOffset, setWeekOffset] = useState(0);
 
-  const dayKeys = useMemo(() => buildDayKeys(new Date(nowTimestamp), 7), [nowTimestamp]);
+  const dayKeys = useMemo(() => {
+    const anchorDate = new Date(nowTimestamp);
+    anchorDate.setDate(anchorDate.getDate() - weekOffset * 7);
+    return buildDayKeys(anchorDate, 7);
+  }, [nowTimestamp, weekOffset]);
   const groupedTasks = useMemo(() => groupCompletedTasksByDay(tasks, dayKeys), [tasks, dayKeys]);
 
+  const newestDayLabel = formatDayLabel(dayKeys[0]);
+  const oldestDayLabel = formatDayLabel(dayKeys[dayKeys.length - 1]);
+
   return (
-    <div className="flex gap-6 min-w-max pb-6">
-      {dayKeys.map(dayKey => {
-        const dayTasks = groupedTasks[dayKey] || [];
-
-        return (
-          <section
-            key={dayKey}
-            data-testid={`completed-calendar-day-${dayKey}`}
-            className="flex flex-col min-w-[85vw] sm:min-w-[300px] max-w-[92vw] sm:max-w-[340px] flex-1"
-            aria-label={`Completed tasks for ${formatDayLabel(dayKey)}`}
+    <div className="flex flex-col gap-4 pb-6">
+      <div className="flex items-center justify-between px-1">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Completed Calendar</p>
+          <p className="text-xs text-muted-foreground">{oldestDayLabel} - {newestDayLabel}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setWeekOffset(current => current + 1)}
+            className="h-8 gap-1.5"
+            aria-label="Previous Week"
           >
-            <div className="flex items-center justify-between mb-4 px-1">
-              <h2 className="text-sm font-semibold text-foreground">{formatDayLabel(dayKey)}</h2>
-              <span className="text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center bg-primary/15 text-primary">
-                {dayTasks.length}
-              </span>
-            </div>
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Previous
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setWeekOffset(current => current - 1)}
+            className="h-8 gap-1.5"
+            aria-label="Next Week"
+          >
+            Next
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
 
-            <div className="flex-1 rounded-xl p-2 min-h-[200px] max-h-[58vh] sm:max-h-[calc(100dvh-220px)] overflow-y-auto border border-border/40 bg-transparent">
-              <div className="flex flex-col gap-3">
-                {dayTasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    activeTimerSeconds={activeTimersByTaskId[task.id]}
-                    customFields={customFields}
-                    onCardClick={onTaskClick}
-                    onEdit={onEditTask}
-                    onDelete={onDeleteTask}
-                    onMove={onMoveTask}
-                  />
-                ))}
+      <div className="flex gap-6 min-w-max">
+        {dayKeys.map(dayKey => {
+          const dayTasks = groupedTasks[dayKey] || [];
 
-                {dayTasks.length === 0 && (
-                  <div className="flex items-center justify-center py-12 text-center">
-                    <p className="text-xs text-muted-foreground">No completed tasks</p>
-                  </div>
-                )}
+          return (
+            <section
+              key={dayKey}
+              data-testid={`completed-calendar-day-${dayKey}`}
+              className="flex flex-col min-w-[85vw] sm:min-w-[300px] max-w-[92vw] sm:max-w-[340px] flex-1"
+              aria-label={`Completed tasks for ${formatDayLabel(dayKey)}`}
+            >
+              <div className="flex items-center justify-between mb-4 px-1">
+                <h2 className="text-sm font-semibold text-foreground">{formatDayLabel(dayKey)}</h2>
+                <span className="text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center bg-primary/15 text-primary">
+                  {dayTasks.length}
+                </span>
               </div>
-            </div>
-          </section>
-        );
-      })}
+
+              <div className="flex-1 rounded-xl p-2 min-h-[200px] max-h-[58vh] sm:max-h-[calc(100dvh-220px)] overflow-y-auto border border-border/40 bg-transparent">
+                <div className="flex flex-col gap-3">
+                  {dayTasks.map(task => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      activeTimerSeconds={activeTimersByTaskId[task.id]}
+                      customFields={customFields}
+                      onCardClick={onTaskClick}
+                      onEdit={onEditTask}
+                      onDelete={onDeleteTask}
+                      onMove={onMoveTask}
+                    />
+                  ))}
+
+                  {dayTasks.length === 0 && (
+                    <div className="flex items-center justify-center py-12 text-center">
+                      <p className="text-xs text-muted-foreground">No completed tasks</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }
